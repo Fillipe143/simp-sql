@@ -2,231 +2,171 @@ package sql
 
 import "core:strings"
 
-Pos :: struct {
-	idx, row, col: uint,
-}
-
 Lexer :: struct {
-	data: []byte,
-	pos:  Pos,
-	eof:  bool,
+	data:   []byte,
+	cursor: Position,
+	eof:    bool,
 }
 
 new_lexer :: proc(data: []byte) -> Lexer {
-	return Lexer{data = data, pos = Pos{0, 1, 1}, eof = len(data) == 0}
+	return {data = data, cursor = Position{0, 1, 1}, eof = len(data) == 0}
 }
 
-@(private)
-peek :: proc(l: ^Lexer) -> byte {
-	if l.eof {return 0}
-	return l.data[l.pos.idx]
-}
-
-@(private)
-peek_next :: proc(l: ^Lexer) -> byte {
-	if (l.pos.idx + 1) >= len(l.data) {return 0}
-	return l.data[l.pos.idx + 1]
-}
-
-@(private)
-consume_and_peek :: proc(l: ^Lexer) -> byte {
-	if l.eof {return 0}
+next_token :: proc(l: ^Lexer) -> Token {
+	consume_trivia(l)
+	if l.eof {return new_token("", l.cursor, .EOF)}
 
 	b := peek(l)
-	l.pos.idx += 1
-	l.pos.col += 1
+	if is_letter(b) {return consume_identifier(l)}
+	if is_digit(b) {return consume_number(l)}
+	if is_symbol(b) {return consume_symbol(l)}
+	if is_quote(b) {return consume_quoted(l)}
 
-	if b == '\n' || b == '\r' {
-		if b == '\r' && peek(l) == '\n' {
-			l.pos.idx += 1
-		}
-		l.pos.col = 1
-		l.pos.row += 1
-	}
-
-	if l.pos.idx >= len(l.data) {l.eof = true}
-	return peek(l)
+	start := l.cursor; consume(l)
+	return new_token(string([]u8{b}), start, .ILEGAL)
 }
 
-@(private)
+// Returns the byte on the current cursor position
+peek :: proc(l: ^Lexer) -> byte {
+	if l.eof {return 0}
+	return l.data[l.cursor.idx]
+}
+
+// Returns the byte of the next cursor position
+peek_next :: proc(l: ^Lexer) -> byte {
+	if (l.cursor.idx + 1) >= len(l.data) {return 0}
+	return l.data[l.cursor.idx + 1]
+}
+
+// Returns a string with the bytes between the start and the current cursor
+split_data :: proc(l: ^Lexer, start: Position) -> string {
+	return string(l.data[start.idx:l.cursor.idx])
+}
+
+// Consumes a character moving the cursor
+consume :: proc(l: ^Lexer) {
+	if l.eof {return}
+
+	b := peek(l)
+	l.cursor.idx += 1
+	l.cursor.col += 1
+
+	if is_new_line(b) {
+		// Windows uses \r\n as new line
+		if b == '\r' && peek(l) == '\n' {l.cursor.idx += 1}
+		l.cursor.col = 1
+		l.cursor.row += 1
+	}
+
+	if l.cursor.idx >= len(l.data) {l.eof = true}
+}
+
+// Consumes white spaces and comments
 consume_trivia :: proc(l: ^Lexer) {
 	for !l.eof {
 		b := peek(l)
+		nb := peek_next(l)
+
+		// Consume white spaces
 		if is_space(b) {
-			consume_and_peek(l)
-		} else if b == '-' && peek_next(l) == '-' {
-			// Comentário de linha: --
-			for !l.eof && peek(l) != '\n' && peek(l) != '\r' {
-				consume_and_peek(l)
+			consume(l)
+			continue
+		}
+
+		// Consumes single line comments
+		if b == '-' && nb == '-' {
+			for !l.eof && !is_new_line(peek(l)) {
+				consume(l)
 			}
-		} else if b == '/' && peek_next(l) == '*' {
-			// Comentário de bloco: /* ... */
-			consume_and_peek(l); consume_and_peek(l)
+			continue
+		}
+
+		// Consumes multi line comments
+		if b == '/' && nb == '*' {
 			for !l.eof {
 				if peek(l) == '*' && peek_next(l) == '/' {
-					consume_and_peek(l); consume_and_peek(l)
+					consume(l); consume(l)
 					break
 				}
-				consume_and_peek(l)
+				consume(l)
 			}
-		} else {
-			break
+			continue
 		}
+
+		break
 	}
 }
 
-@(private)
+// Consumes a keyword or identifier
 consume_identifier :: proc(l: ^Lexer) -> Token {
-	start_pos := l.pos
-	for !l.eof && (is_letter(peek(l)) || is_digit(peek(l))) {
-		consume_and_peek(l)
-	}
-	literal := string(l.data[start_pos.idx:l.pos.idx])
-	return new_token(l, literal, identifier_kind(literal), start_pos)
+	start := l.cursor
+	for is_letter(peek(l)) || is_digit(peek(l)) {consume(l)}
+	value := split_data(l, start)
+	return new_token(value, start, identify_kind(value))
 }
 
-@(private)
+// Consumes a number including floats
 consume_number :: proc(l: ^Lexer) -> Token {
-	start_pos := l.pos
-	for !l.eof && (is_digit(peek(l)) || peek(l) == '.') {
-		consume_and_peek(l)
-	}
-	return new_token(l, string(l.data[start_pos.idx:l.pos.idx]), .NUMBER, start_pos)
+	start := l.cursor
+	for is_digit(peek(l)) || peek(l) == '.' {consume(l)}
+	return new_token(split_data(l, start), start, .NUMBER)
 }
 
-@(private)
-consume_quoted :: proc(l: ^Lexer) -> Token {
-	start_pos := l.pos
-	quote_type := peek(l)
-	consume_and_peek(l)
+// Consumes symbols
+consume_symbol :: proc(l: ^Lexer) -> Token {
+	start := l.cursor
+	for is_symbol(peek(l)) {consume(l)}
+	value := split_data(l, start)
+	return new_token(value, start, identify_kind(value))
+}
 
-	builder := strings.builder_make()
-	defer strings.builder_destroy(&builder)
+// Consumes strings and quoted identifiers "string", 'string', `identifier`
+consume_quoted :: proc(l: ^Lexer) -> Token {
+	start := l.cursor
+	quote_char := peek(l); consume(l)
+	sb := strings.builder_make()
 
 	for !l.eof {
 		b := peek(l)
 
-		if b == quote_type {
-			if peek_next(l) == quote_type {
-				strings.write_byte(&builder, quote_type)
-				consume_and_peek(l); consume_and_peek(l)
+		// Double quotes escape
+		if b == quote_char {
+			if peek_next(l) == quote_char {
+				strings.write_byte(&sb, quote_char)
+				consume(l); consume(l)
 				continue
 			}
-			consume_and_peek(l)
+			consume(l)
 			break
 		}
 
-		if b == '\\' && quote_type != '`' {
-			consume_and_peek(l)
+		// Normal '\' escape (only in case of strings)
+		if quote_char != '`' && b == '\\' {
+			consume(l)
 			next := peek(l)
 			switch next {
 			case 'n':
-				strings.write_byte(&builder, '\n')
-			case 'r':
-				strings.write_byte(&builder, '\r')
+				strings.write_byte(&sb, '\n')
 			case 't':
-				strings.write_byte(&builder, '\t')
+				strings.write_byte(&sb, '\t')
+			case 'r':
+				strings.write_byte(&sb, '\r')
 			case '\\':
-				strings.write_byte(&builder, '\\')
-			case quote_type:
-				strings.write_byte(&builder, quote_type)
+				strings.write_byte(&sb, '\\')
+			case quote_char:
+				strings.write_byte(&sb, quote_char)
 			case:
-				strings.write_byte(&builder, '\\')
-				strings.write_byte(&builder, next)
+				strings.write_byte(&sb, next)
 			}
-			consume_and_peek(l)
-			continue
+            consume(l)
+            continue
 		}
 
-		strings.write_byte(&builder, b)
-		consume_and_peek(l)
+        strings.write_byte(&sb, b)
+        consume(l)
 	}
 
-	literal := strings.clone(strings.to_string(builder))
-	kind := (quote_type == '`') ? TokenKind.IDENTIFIER : TokenKind.STRING
-	return new_token(l, literal, kind, start_pos)
-}
-
-@(private)
-consume_symbol :: proc(l: ^Lexer) -> Token {
-	start_pos := l.pos
-	b := peek(l)
-	next := peek_next(l)
-
-	kind := TokenKind.ILEGAL
-
-	switch b {
-	case ',':
-		kind = .COMMA
-	case '.':
-		kind = .DOT
-	case '(':
-		kind = .LPAREN
-	case ')':
-		kind = .RPAREN
-	case ';':
-		kind = .SEMICOLON
-	case '=':
-		kind = .EQ
-	case '+':
-		kind = .PLUS
-	case '-':
-		kind = .MINUS
-	case '*':
-		kind = .ASTERISK
-	case '/':
-		kind = .SLASH
-
-	case '<':
-		kind = .LT
-		if next == '>' {
-			consume_and_peek(l)
-			consume_and_peek(l)
-			return new_token(l, "<>", .NEQ, start_pos)
-		} else if next == '=' {
-			consume_and_peek(l)
-			consume_and_peek(l)
-			return new_token(l, "<=", .LTE, start_pos)
-		}
-
-	case '>':
-		kind = .GT
-		if next == '=' {
-			consume_and_peek(l)
-			consume_and_peek(l)
-			return new_token(l, ">=", .GTE, start_pos)
-		}
-
-	case '!':
-		if next == '=' {
-			consume_and_peek(l)
-			consume_and_peek(l)
-			return new_token(l, "!=", .NEQ, start_pos)
-		}
-	}
-
-	if kind != .ILEGAL {
-		consume_and_peek(l)
-		return new_token(l, string(l.data[start_pos.idx:l.pos.idx]), kind, start_pos)
-	}
-
-	consume_and_peek(l)
-	return new_token(l, string(l.data[start_pos.idx:l.pos.idx]), .ILEGAL, start_pos)
-}
-next_token :: proc(l: ^Lexer) -> Token {
-	consume_trivia(l)
-
-	current_pos := l.pos
-	if l.eof {return new_token(l, "", .EOF, current_pos)}
-
-	b := peek(l)
-	if is_letter(b) {
-		return consume_identifier(l)
-	} else if is_digit(b) {
-		return consume_number(l)
-	} else if is_quote(b) {
-		return consume_quoted(l)
-	} else {
-		return consume_symbol(l)
-	}
+    value := strings.to_string(sb)
+    kind := quote_char == '`' ? TokenKind.IDENTIFIER : TokenKind.STRING
+	return new_token(value, start, kind)
 }
