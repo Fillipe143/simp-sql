@@ -6,6 +6,7 @@ TokenKind :: enum {
 	IDENTIFIER,
 	NUMBER,
 	STRING,
+    BOOLEAN,
 	ILEGAL,
 	EOF,
 
@@ -73,6 +74,8 @@ new_token :: proc(value: string, start: Position, kind: TokenKind) -> Token {
 identify_kind :: proc(value: string) -> TokenKind {
     upper := strings.to_upper(value, context.temp_allocator)
     switch upper {
+    case "TRUE":        return .BOOLEAN
+    case "FALSE":       return .BOOLEAN
     case "SELECT":      return .SELECT
     case "INSERT":      return .INSERT
     case "UPDATE":      return .UPDATE
