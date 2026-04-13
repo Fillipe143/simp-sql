@@ -26,25 +26,29 @@ next_token :: proc(l: ^Lexer) -> Token {
 	return new_token(string([]u8{b}), start, .ILEGAL)
 }
 
-// Returns the byte on the current cursor position
+@(private)
 peek :: proc(l: ^Lexer) -> byte {
+    // Returns the byte on the current cursor position
 	if l.eof {return 0}
 	return l.data[l.cursor.idx]
 }
 
-// Returns the byte of the next cursor position
+@(private)
 peek_next :: proc(l: ^Lexer) -> byte {
+    // Returns the byte of the next cursor position
 	if (l.cursor.idx + 1) >= len(l.data) {return 0}
 	return l.data[l.cursor.idx + 1]
 }
 
-// Returns a string with the bytes between the start and the current cursor
+@(private)
 split_data :: proc(l: ^Lexer, start: Position) -> string {
+    // Returns a string with the bytes between the start and the current cursor
 	return string(l.data[start.idx:l.cursor.idx])
 }
 
-// Consumes a character moving the cursor
+@(private)
 consume :: proc(l: ^Lexer) {
+    // Consumes a character moving the cursor
 	if l.eof {return}
 
 	b := peek(l)
@@ -61,8 +65,9 @@ consume :: proc(l: ^Lexer) {
 	if l.cursor.idx >= len(l.data) {l.eof = true}
 }
 
-// Consumes white spaces and comments
+@(private)
 consume_trivia :: proc(l: ^Lexer) {
+    // Consumes white spaces and comments
 	for !l.eof {
 		b := peek(l)
 		nb := peek_next(l)
@@ -97,31 +102,35 @@ consume_trivia :: proc(l: ^Lexer) {
 	}
 }
 
-// Consumes a keyword or identifier
+@(private)
 consume_identifier :: proc(l: ^Lexer) -> Token {
+    // Consumes a keyword or identifier
 	start := l.cursor
 	for is_letter(peek(l)) || is_digit(peek(l)) {consume(l)}
 	value := split_data(l, start)
 	return new_token(value, start, identify_kind(value))
 }
 
-// Consumes a number including floats
+@(private)
 consume_number :: proc(l: ^Lexer) -> Token {
+    // Consumes a number including floats
 	start := l.cursor
 	for is_digit(peek(l)) || peek(l) == '.' {consume(l)}
 	return new_token(split_data(l, start), start, .NUMBER)
 }
 
-// Consumes symbols
+@(private)
 consume_symbol :: proc(l: ^Lexer) -> Token {
+    // Consumes symbols
 	start := l.cursor
 	for is_symbol(peek(l)) {consume(l)}
 	value := split_data(l, start)
 	return new_token(value, start, identify_kind(value))
 }
 
-// Consumes strings and quoted identifiers "string", 'string', `identifier`
+@(private)
 consume_quoted :: proc(l: ^Lexer) -> Token {
+    // Consumes strings and quoted identifiers "string", 'string', `identifier`
 	start := l.cursor
 	quote_char := peek(l); consume(l)
 	sb := strings.builder_make()

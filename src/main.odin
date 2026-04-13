@@ -9,8 +9,6 @@ main :: proc() {
 	assert(ok, "Não foi possível ler o arquivo")
 
 	l := sql.new_lexer(data)
-
-	for !l.eof {
-		fmt.println(sql.next_token(&l))
-	}
+    p := sql.new_parser(l)
+    fmt.printf("%#v\n", sql.parse_all(&p))
 }

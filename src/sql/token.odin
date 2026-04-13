@@ -71,6 +71,7 @@ new_token :: proc(value: string, start: Position, kind: TokenKind) -> Token {
 	return Token{kind, start, value}
 }
 
+@(private)
 identify_kind :: proc(value: string) -> TokenKind {
     upper := strings.to_upper(value, context.temp_allocator)
     switch upper {
@@ -124,4 +125,15 @@ identify_kind :: proc(value: string) -> TokenKind {
     case "/":           return .SLASH
     }
     return is_letter(value[0]) ? .IDENTIFIER : .ILEGAL
+}
+
+@(private)
+is_operator :: proc(kind: TokenKind) -> bool {
+    #partial switch kind {
+    case .EQ, .NEQ, .LT, .GT, .LTE, .GTE,
+         .AND, .OR,
+         .PLUS, .MINUS, .ASTERISK, .SLASH:
+        return true
+    }
+    return false
 }
