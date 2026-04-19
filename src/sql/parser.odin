@@ -1,6 +1,5 @@
 package sql
 
-import "core:crypto/_fiat/field_curve25519"
 import "core:strconv"
 import "core:strings"
 

@@ -1,0 +1,459 @@
+package editor
+
+import "core:fmt"
+import "core:slice"
+import "core:strings"
+import rl "vendor:raylib"
+
+// --- CONFIGURAÇÕES ---
+KEY_REPEAT_DELAY :: 0.4
+KEY_REPEAT_INTERVAL :: 0.04
+SCROLL_SPEED :: 3
+MAX_UNDO :: 100
+
+SQL_KEYWORDS :: []string {
+	"SELECT",
+	"FROM",
+	"WHERE",
+	"INSERT",
+	"UPDATE",
+	"DELETE",
+	"JOIN",
+	"LEFT",
+	"RIGHT",
+	"INNER",
+	"ON",
+	"GROUP",
+	"BY",
+	"ORDER",
+	"HAVING",
+	"LIMIT",
+	"AND",
+	"OR",
+	"NOT",
+	"IN",
+	"NULL",
+	"AS",
+	"CREATE",
+	"TABLE",
+	"DROP",
+	"DATABASE",
+	"VALUES",
+	"INTO",
+}
+
+KEYWORD_COLOR :: rl.Color{86, 156, 214, 255} // Azul VS Code
+SYMBOL_COLOR :: rl.Color{180, 180, 180, 255}
+
+// Estrutura para salvar estados (Undo/Redo)
+EditorState :: struct {
+	data:   [dynamic]string,
+	cursor: struct {
+		x, y: i32,
+	},
+}
+
+EditorContext :: struct {
+	data:                [dynamic]string,
+	cursor:              struct {
+		x, y: i32,
+	},
+	selection_start:     struct {
+		x, y: i32,
+	},
+	selection_end:       struct {
+		x, y: i32,
+	},
+	is_selecting:        bool,
+	x, y, width, height: i32,
+	margin, ln_size:     i32,
+	font:                rl.Font,
+	bg_color:            rl.Color,
+	text_color:          rl.Color,
+	ln_color:            rl.Color,
+	ln_bg_color:         rl.Color,
+	selection_color:     rl.Color,
+	cursor_color:        rl.Color,
+	scroll_y:            i32,
+	key_repeat_timer:    f32,
+	last_key_pressed:    rl.KeyboardKey,
+	undo_stack:          [dynamic]EditorState,
+	redo_stack:          [dynamic]EditorState,
+}
+
+// --- PONTO DE ENTRADA PÚBLICO ---
+
+open :: proc() {
+	rl.SetTraceLogLevel(.WARNING)
+	rl.InitWindow(800, 600, "Odin SQL Editor Pro")
+	rl.SetTargetFPS(60)
+
+	ctx := start_editor()
+	defer {
+		rl.UnloadFont(ctx.font)
+		for s in ctx.data do delete(s)
+		delete(ctx.data)
+		rl.CloseWindow()
+	}
+
+	for !rl.WindowShouldClose() {
+		rl.BeginDrawing()
+		rl.ClearBackground(rl.BLACK)
+		render_editor(&ctx)
+		rl.EndDrawing()
+	}
+}
+
+start_editor :: proc() -> EditorContext {
+	data := make([dynamic]string)
+	append(&data, "")
+
+	return EditorContext {
+		data = data,
+		x = 10,
+		y = 10,
+		width = 780,
+		height = 580,
+		margin = 10,
+		ln_size = 60,
+		font = rl.LoadFontEx("assets/fonts/JetBrainsMonoNerdFont-Regular.ttf", 24, nil, 0),
+		bg_color = {18, 18, 18, 255},
+		text_color = {230, 230, 230, 255},
+		ln_color = {255, 222, 33, 255},
+		ln_bg_color = {25, 25, 25, 255},
+		selection_color = {255, 222, 33, 80},
+		cursor_color = {255, 222, 33, 255},
+		undo_stack = make([dynamic]EditorState),
+		redo_stack = make([dynamic]EditorState),
+	}
+}
+
+// --- LÓGICA DE HIGHLIGHTING ---
+
+is_alphanumeric :: proc(c: u8) -> bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'
+}
+
+is_keyword :: proc(word: string) -> bool {
+	upper := strings.to_upper(word, context.temp_allocator)
+	for k in SQL_KEYWORDS {
+		if upper == k do return true
+	}
+	return false
+}
+
+draw_line_highlighted :: proc(ctx: ^EditorContext, line: string, py: i32) {
+	fh := f32(ctx.font.baseSize) > 0 ? f32(ctx.font.baseSize) : 24.0
+	current_x: f32 = 0
+	i := 0
+	for i < len(line) {
+		start := i
+		if is_alphanumeric(line[i]) {
+			for i < len(line) && is_alphanumeric(line[i]) do i += 1
+			word := line[start:i]
+			col := is_keyword(word) ? KEYWORD_COLOR : ctx.text_color
+			txt := strings.clone_to_cstring(word, context.temp_allocator)
+			rl.DrawTextEx(
+				ctx.font,
+				txt,
+				{f32(ctx.x + ctx.ln_size + ctx.margin) + current_x, f32(ctx.y + ctx.margin + py)},
+				fh,
+				0,
+				col,
+			)
+			current_x += rl.MeasureTextEx(ctx.font, txt, fh, 0).x
+		} else {
+			char_str := line[i:i + 1]
+			col := (line[i] == ' ' || line[i] == '\t') ? ctx.text_color : SYMBOL_COLOR
+			txt := strings.clone_to_cstring(char_str, context.temp_allocator)
+			rl.DrawTextEx(
+				ctx.font,
+				txt,
+				{f32(ctx.x + ctx.ln_size + ctx.margin) + current_x, f32(ctx.y + ctx.margin + py)},
+				fh,
+				0,
+				col,
+			)
+			current_x += rl.MeasureTextEx(ctx.font, txt, fh, 0).x
+			i += 1
+		}
+	}
+}
+
+// --- SISTEMA DE UNDO / REDO ---
+
+save_undo :: proc(ctx: ^EditorContext) {
+	new_data := make([dynamic]string, len(ctx.data))
+	for s, i in ctx.data do new_data[i] = strings.clone(s)
+	state := EditorState {
+		data   = new_data,
+		cursor = ctx.cursor,
+	}
+	append(&ctx.undo_stack, state)
+	if len(ctx.undo_stack) > MAX_UNDO do ordered_remove(&ctx.undo_stack, 0)
+	clear(&ctx.redo_stack)
+}
+
+apply_undo :: proc(ctx: ^EditorContext) {
+	if len(ctx.undo_stack) == 0 do return
+	curr_data := make([dynamic]string, len(ctx.data))
+	for s, i in ctx.data do curr_data[i] = strings.clone(s)
+	append(&ctx.redo_stack, EditorState{data = curr_data, cursor = ctx.cursor})
+	state := pop(&ctx.undo_stack)
+	ctx.data = state.data
+	ctx.cursor = state.cursor
+	ctx.selection_start = ctx.cursor
+	ctx.selection_end = ctx.cursor
+}
+
+// --- UTILITÁRIOS ---
+
+get_line_from_mouse :: proc(ctx: ^EditorContext, my: f32) -> i32 {
+	fh := i32(ctx.font.baseSize) > 0 ? i32(ctx.font.baseSize) : 24
+	line := (i32(my) - ctx.y - ctx.margin + ctx.scroll_y) / fh
+	return clamp(line, 0, i32(len(ctx.data)) - 1)
+}
+
+get_col_from_mouse :: proc(ctx: ^EditorContext, row: i32, mx: f32) -> i32 {
+	line := ctx.data[row]
+	fh := f32(ctx.font.baseSize) > 0 ? f32(ctx.font.baseSize) : 24.0
+	rel_x := mx - f32(ctx.x + ctx.ln_size + ctx.margin)
+	if rel_x <= 0 do return 0
+	last_w: f32 = 0
+	for i in 1 ..= len(line) {
+		w :=
+			rl.MeasureTextEx(ctx.font, strings.clone_to_cstring(line[:i], context.temp_allocator), fh, 0).x
+		if w > rel_x {
+			return (rel_x - last_w < w - rel_x) ? i32(i - 1) : i32(i)
+		}
+		last_w = w
+	}
+	return i32(len(line))
+}
+
+has_selection :: proc(ctx: ^EditorContext) -> bool {
+	return ctx.selection_start != ctx.selection_end
+}
+
+get_selection_ordered :: proc(ctx: ^EditorContext) -> (start, end: struct {
+		x, y: i32,
+	}) {
+	s, e := ctx.selection_start, ctx.selection_end
+	if s.y > e.y || (s.y == e.y && s.x > e.x) do return e, s
+	return s, e
+}
+
+delete_selection :: proc(ctx: ^EditorContext) {
+	if !has_selection(ctx) do return
+	s, e := get_selection_ordered(ctx)
+	if s.y == e.y {
+		line := ctx.data[s.y]
+		ctx.data[s.y] = fmt.aprintf("%s%s", line[:s.x], line[e.x:])
+	} else {
+		first, last := ctx.data[s.y], ctx.data[e.y]
+		ctx.data[s.y] = fmt.aprintf("%s%s", first[:s.x], last[e.x:])
+		for _ in 0 ..< (e.y - s.y) do ordered_remove(&ctx.data, int(s.y + 1))
+	}
+	ctx.cursor.x, ctx.cursor.y = s.x, s.y
+	ctx.selection_start, ctx.selection_end = ctx.cursor, ctx.cursor
+}
+
+copy_selection :: proc(ctx: ^EditorContext) {
+	if !has_selection(ctx) do return
+	s, e := get_selection_ordered(ctx)
+	sb: strings.Builder
+	strings.builder_init(&sb)
+	for y in s.y ..= e.y {
+		line := ctx.data[y]
+		sx := (y == s.y) ? s.x : 0
+		ex := (y == e.y) ? e.x : i32(len(line))
+		strings.write_string(&sb, line[sx:ex])
+		if y < e.y do strings.write_string(&sb, "\n")
+	}
+	rl.SetClipboardText(strings.to_cstring(&sb))
+}
+
+// --- RENDERIZAÇÃO ---
+
+render_editor :: proc(ctx: ^EditorContext) {
+	dt := rl.GetFrameTime()
+	fh := i32(ctx.font.baseSize) > 0 ? i32(ctx.font.baseSize) : 24
+	m_pos := rl.GetMousePosition()
+
+	if w := rl.GetMouseWheelMove(); w != 0 do ctx.scroll_y -= i32(w * f32(fh) * SCROLL_SPEED)
+	if ctx.scroll_y < 0 do ctx.scroll_y = 0
+
+	if rl.IsMouseButtonPressed(.LEFT) {
+		ctx.cursor.y = get_line_from_mouse(ctx, m_pos.y)
+		ctx.cursor.x = get_col_from_mouse(ctx, ctx.cursor.y, m_pos.x)
+		ctx.selection_start, ctx.selection_end = ctx.cursor, ctx.cursor
+		ctx.is_selecting = true
+	}
+	if ctx.is_selecting {
+		ctx.cursor.y = get_line_from_mouse(ctx, m_pos.y)
+		ctx.cursor.x = get_col_from_mouse(ctx, ctx.cursor.y, m_pos.x)
+		ctx.selection_end = ctx.cursor
+		if rl.IsMouseButtonReleased(.LEFT) do ctx.is_selecting = false
+	}
+
+	if c := rl.GetCharPressed(); c != 0 do insert_char(ctx, c)
+	if k := rl.GetKeyPressed(); k != .KEY_NULL {
+		ctx.last_key_pressed, ctx.key_repeat_timer = k, -KEY_REPEAT_DELAY
+		handle_special_keys(ctx, k)
+	}
+	if ctx.last_key_pressed != .KEY_NULL && rl.IsKeyDown(ctx.last_key_pressed) {
+		ctx.key_repeat_timer += dt
+		if ctx.key_repeat_timer >= KEY_REPEAT_INTERVAL {
+			handle_special_keys(ctx, ctx.last_key_pressed)
+			ctx.key_repeat_timer = 0
+		}
+	} else do ctx.last_key_pressed = .KEY_NULL
+
+	rl.DrawRectangle(ctx.x, ctx.y, ctx.width, ctx.height, ctx.bg_color)
+	rl.BeginScissorMode(ctx.x, ctx.y, ctx.width, ctx.height)
+	rl.DrawRectangle(ctx.x, ctx.y, ctx.ln_size, ctx.height, ctx.ln_bg_color)
+
+	for line, i in ctx.data {
+		row := i32(i)
+		py := row * fh - ctx.scroll_y
+		if py + fh < 0 || py > ctx.height do continue
+
+		if has_selection(ctx) do draw_selection_line(ctx, row, py)
+		draw_text_internal(ctx, fmt.ctprintf("% 4d", row + 1), -ctx.ln_size, py, ctx.ln_color)
+		draw_line_highlighted(ctx, line, py)
+
+		if row == ctx.cursor.y {
+			tw :=
+				rl.MeasureTextEx(ctx.font, strings.clone_to_cstring(line[:ctx.cursor.x], context.temp_allocator), f32(fh), 0).x
+			if i32(rl.GetTime() * 2) % 2 == 0 {
+				rl.DrawRectangleRec(
+					{
+						f32(ctx.x + ctx.ln_size + ctx.margin) + tw,
+						f32(ctx.y + ctx.margin + py),
+						2,
+						f32(fh),
+					},
+					ctx.cursor_color,
+				)
+			}
+		}
+	}
+	rl.EndScissorMode()
+}
+
+draw_selection_line :: proc(ctx: ^EditorContext, row: i32, py: i32) {
+	s, e := get_selection_ordered(ctx)
+	if row < s.y || row > e.y do return
+	line := ctx.data[row]
+	fh := f32(ctx.font.baseSize) > 0 ? f32(ctx.font.baseSize) : 24.0
+	x_s := (row == s.y) ? s.x : 0
+	x_e := (row == e.y) ? e.x : i32(len(line))
+	px_s :=
+		rl.MeasureTextEx(ctx.font, strings.clone_to_cstring(line[:x_s], context.temp_allocator), fh, 0).x
+	px_e :=
+		rl.MeasureTextEx(ctx.font, strings.clone_to_cstring(line[:x_e], context.temp_allocator), fh, 0).x
+	w := (row != e.y && x_s == x_e) ? 10 : max(px_e - px_s, 5)
+	rl.DrawRectangleRec(
+		{f32(ctx.x + ctx.ln_size + ctx.margin) + px_s, f32(ctx.y + ctx.margin + py), w, fh},
+		ctx.selection_color,
+	)
+}
+
+draw_text_internal :: proc(ctx: ^EditorContext, txt: cstring, off_x, py: i32, col: rl.Color) {
+	fh := f32(ctx.font.baseSize) > 0 ? f32(ctx.font.baseSize) : 24.0
+	rl.DrawTextEx(
+		ctx.font,
+		txt,
+        {f32(ctx.x + ctx.ln_size + ctx.margin + off_x), f32(ctx.y + ctx.margin + py)},
+		fh,
+		0,
+		col,
+	)
+}
+
+// --- INPUT HANDLERS ---
+
+insert_char :: proc(ctx: ^EditorContext, c: rune) {
+	save_undo(ctx)
+	if has_selection(ctx) do delete_selection(ctx)
+	l := ctx.data[ctx.cursor.y]
+	ctx.data[ctx.cursor.y] = fmt.aprintf("%s%r%s", l[:ctx.cursor.x], c, l[ctx.cursor.x:])
+	ctx.cursor.x += 1
+	ctx.selection_start, ctx.selection_end = ctx.cursor, ctx.cursor
+}
+
+insert_char_no_undo :: proc(ctx: ^EditorContext, c: rune) {
+	l := ctx.data[ctx.cursor.y]
+	ctx.data[ctx.cursor.y] = fmt.aprintf("%s%r%s", l[:ctx.cursor.x], c, l[ctx.cursor.x:])
+	ctx.cursor.x += 1
+}
+
+handle_special_keys :: proc(ctx: ^EditorContext, k: rl.KeyboardKey) {
+	ctrl := rl.IsKeyDown(.LEFT_CONTROL) || rl.IsKeyDown(.RIGHT_CONTROL)
+	shift := rl.IsKeyDown(.LEFT_SHIFT) || rl.IsKeyDown(.RIGHT_SHIFT)
+	r, c := ctx.cursor.y, ctx.cursor.x
+
+	if ctrl {
+		#partial switch k {
+		case .A:
+			ctx.selection_start = {0, 0}; ctx.selection_end = {
+				i32(len(ctx.data[len(ctx.data) - 1])),
+				i32(len(ctx.data) - 1),
+			}
+			return
+		case .C:
+			copy_selection(ctx); return
+		case .V:
+			save_undo(ctx)
+			if clip := rl.GetClipboardText(); clip != nil {
+				for char in string(clip) {
+					if char == '\n' {
+						post := strings.clone(ctx.data[ctx.cursor.y][ctx.cursor.x:])
+						ctx.data[ctx.cursor.y] = strings.clone(
+							ctx.data[ctx.cursor.y][:ctx.cursor.x],
+						)
+						inject_at(&ctx.data, int(ctx.cursor.y + 1), post)
+						ctx.cursor.y += 1; ctx.cursor.x = 0
+					} else do insert_char_no_undo(ctx, char)
+				}
+			}
+			return
+		case .Z:
+			apply_undo(ctx); return
+		}
+	}
+
+	#partial switch k {
+	case .ENTER:
+		save_undo(ctx)
+		if has_selection(ctx) do delete_selection(ctx)
+		post := strings.clone(ctx.data[ctx.cursor.y][ctx.cursor.x:])
+		ctx.data[ctx.cursor.y] = strings.clone(ctx.data[ctx.cursor.y][:ctx.cursor.x])
+		inject_at(&ctx.data, int(ctx.cursor.y + 1), post)
+		ctx.cursor.y += 1; ctx.cursor.x = 0
+	case .BACKSPACE:
+		if has_selection(ctx) {save_undo(ctx); delete_selection(ctx)} else if c > 0 {
+			save_undo(ctx)
+			ctx.data[r] = fmt.aprintf("%s%s", ctx.data[r][:c - 1], ctx.data[r][c:])
+			ctx.cursor.x -= 1
+		}
+	case .LEFT:
+		if c > 0 do ctx.cursor.x -= 1
+		else if r > 0 {ctx.cursor.y -= 1; ctx.cursor.x = i32(len(ctx.data[ctx.cursor.y]))}
+	case .RIGHT:
+		if c < i32(len(ctx.data[r])) do ctx.cursor.x += 1
+		else if r < i32(len(ctx.data)) - 1 {ctx.cursor.y += 1; ctx.cursor.x = 0}
+	case .UP:
+		if r >
+		   0 {ctx.cursor.y -= 1; ctx.cursor.x = min(ctx.cursor.x, i32(len(ctx.data[ctx.cursor.y])))}
+	case .DOWN:
+		if r <
+		   i32(len(ctx.data)) -
+			   1 {ctx.cursor.y += 1; ctx.cursor.x = min(ctx.cursor.x, i32(len(ctx.data[ctx.cursor.y])))}
+	}
+
+	if shift do ctx.selection_end = ctx.cursor
+	else if !ctrl && (k == .LEFT || k == .RIGHT || k == .UP || k == .DOWN) {
+		ctx.selection_start, ctx.selection_end = ctx.cursor, ctx.cursor
+	}
+}
