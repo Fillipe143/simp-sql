@@ -1,7 +1,7 @@
 package main
 
-import "editor"
+import "app"
 
 main :: proc() {
-    editor.open()
+    app.start()
 }
