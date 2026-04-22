@@ -176,7 +176,8 @@ render_cursor :: proc(ctx: ^Context) {
 
 	if ctx.keyboard.mode == .NORMAL {
 		char_under: rune = ' '
-		if safe_col > 0 do char_under = line_runes[safe_col - 1]
+
+		if len(line_runes) > 0 do char_under = line_runes[max(safe_col, 1)- 1]
 
 		char_str := utf8.runes_to_string([]rune{char_under}, context.temp_allocator)
 		char_cstr := strings.clone_to_cstring(char_str, context.temp_allocator)

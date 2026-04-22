@@ -17,7 +17,22 @@ Keyboard :: struct {
 }
 
 default_keyboard :: proc() -> Keyboard {
-	return Keyboard{mode = .NORMAL, repeat_delay = 0.3, repeat_rate = 0.03}
+	return Keyboard{mode = .INSERT, repeat_delay = 0.3, repeat_rate = 0.03}
+}
+
+read_input :: proc(ctx: ^Context) {
+	has_action := false
+
+	switch ctx.keyboard.mode {
+	case .NORMAL:
+		has_action = normal_mode_logic(ctx)
+	case .INSERT:
+		has_action = insert_mode_logic(ctx)
+	case .VISUAL:
+		has_action = visual_mode_logic(ctx)
+	}
+
+	if has_action do ctx.keyboard.last_input_time = rl.GetTime()
 }
 
 key_is_actionable :: proc(key: rl.KeyboardKey, ctx: ^Context) -> bool {
@@ -36,90 +51,98 @@ key_is_actionable :: proc(key: rl.KeyboardKey, ctx: ^Context) -> bool {
 	return false
 }
 
-reset_blink :: proc(ctx: ^Context) {
-	ctx.keyboard.last_input_time = rl.GetTime()
-}
+insert_mode_logic :: proc(ctx: ^Context) -> (action: bool) {
+	shift := rl.IsKeyDown(.LEFT_SHIFT) || rl.IsKeyDown(.RIGHT_SHIFT)
+	action = true
 
-read_input :: proc(ctx: ^Context) {
-	has_action := false
-
-	switch ctx.keyboard.mode {
-	case .NORMAL:
-		has_action = normal_mode_logic(ctx)
-	case .INSERT:
-		has_action = insert_mode_logic(ctx)
-	case .VISUAL:
-		has_action = visual_mode_logic(ctx)
+	switch {
+	case key_is_actionable(.BACKSPACE, ctx):
+		remove(&ctx.editor, true)
+	case key_is_actionable(.DELETE, ctx):
+		delete_char(&ctx.editor, true)
+	case key_is_actionable(.ENTER, ctx):
+		insert(&ctx.editor, '\n')
+	case key_is_actionable(.TAB, ctx):
+		for i := 0; i < 4; i += 1 do insert(&ctx.editor, ' ')
+	case key_is_actionable(.LEFT, ctx):
+		move_left(&ctx.editor)
+	case key_is_actionable(.RIGHT, ctx):
+		move_right(&ctx.editor)
+	case key_is_actionable(.UP, ctx):
+		move_up(&ctx.editor)
+	case key_is_actionable(.DOWN, ctx):
+		move_down(&ctx.editor)
+	case key_is_actionable(.ESCAPE, ctx):
+		ctx.keyboard.mode = .NORMAL
+	case:
+		action = false
 	}
-
-	if has_action do reset_blink(ctx)
-}
-
-insert_mode_logic :: proc(ctx: ^Context) -> bool {
-	action := false
 
 	for c := rl.GetCharPressed(); c != 0; c = rl.GetCharPressed() {
 		insert(&ctx.editor, c)
 		action = true
 	}
 
-	if key_is_actionable(.BACKSPACE, ctx) {remove(&ctx.editor); action = true}
-	if key_is_actionable(.ENTER, ctx) {insert(&ctx.editor, '\n'); action = true}
-	if key_is_actionable(.LEFT, ctx) {move_left(&ctx.editor); action = true}
-	if key_is_actionable(.RIGHT, ctx) {move_right(&ctx.editor); action = true}
-	if key_is_actionable(.UP, ctx) {move_up(&ctx.editor); action = true}
-	if key_is_actionable(.DOWN, ctx) {move_down(&ctx.editor); action = true}
-	if key_is_actionable(.TAB, ctx) {for i:= 0; i < 3; i+=1 do insert(&ctx.editor, ' '); action = true}
-
-	if rl.IsKeyPressed(.ESCAPE) {
-		ctx.keyboard.mode = .NORMAL
-		action = true
-	}
-
 	return action
 }
 
-normal_mode_logic :: proc(ctx: ^Context) -> bool {
-	action := false
+normal_mode_logic :: proc(ctx: ^Context) -> (action: bool) {
+	shift := rl.IsKeyDown(.LEFT_SHIFT) || rl.IsKeyDown(.RIGHT_SHIFT)
+	pressed_char := rl.GetCharPressed()
+	action = true
 
-	if key_is_actionable(.H, ctx) ||
-	   key_is_actionable(.LEFT, ctx) {move_left(&ctx.editor); action = true}
-	if key_is_actionable(.L, ctx) ||
-	   key_is_actionable(.RIGHT, ctx) {move_right(&ctx.editor); action = true}
-	if key_is_actionable(.J, ctx) ||
-	   key_is_actionable(.DOWN, ctx) {move_down(&ctx.editor); action = true}
-	if key_is_actionable(.K, ctx) ||
-	   key_is_actionable(.UP, ctx) {move_up(&ctx.editor); action = true}
-
-	if rl.IsKeyPressed(.I) {
+	switch {
+	case key_is_actionable(.H, ctx):
+		move_left(&ctx.editor)
+	case key_is_actionable(.J, ctx):
+		move_down(&ctx.editor)
+	case key_is_actionable(.K, ctx):
+		move_up(&ctx.editor)
+	case key_is_actionable(.L, ctx):
+		move_right(&ctx.editor)
+	case pressed_char == '0':
+		move_start(&ctx.editor)
+	case pressed_char == '$':
+		move_end(&ctx.editor)
+	case key_is_actionable(.I, ctx):
+        // TODO resolver problema quando left tiver vazio
 		ctx.keyboard.mode = .INSERT
-		action = true; move_left(&ctx.editor)
+		if shift do move_start(&ctx.editor)
+		else do move_left(&ctx.editor)
+	case key_is_actionable(.A, ctx):
+        // TODO resolver problema quando left tiver vazio
+		ctx.keyboard.mode = .INSERT
+		if shift do move_end(&ctx.editor)
+	case key_is_actionable(.O, ctx):
+		ctx.keyboard.mode = .INSERT
+		if shift {
+			move_start(&ctx.editor)
+			insert(&ctx.editor, '\n')
+			move_up(&ctx.editor)
+		} else {
+			move_end(&ctx.editor)
+			insert(&ctx.editor, '\n')
+			move_down(&ctx.editor)
+		}
+	case key_is_actionable(.DELETE, ctx):
+		remove(&ctx.editor)
+        move_right(&ctx.editor)
+	case key_is_actionable(.X, ctx):
+		remove(&ctx.editor)
+        move_right(&ctx.editor)
+    case key_is_actionable(.W, ctx):
+        next_word(&ctx.editor)
+    case key_is_actionable(.B, ctx):
+        prev_word(&ctx.editor)
+    case key_is_actionable(.E, ctx):
+        next_word(&ctx.editor)
+        move_left(&ctx.editor)
+	case:
+		action = false
 	}
-
-    if rl.IsKeyPressed(.O) {
-		action = true
-		ctx.keyboard.mode = .INSERT
-        insert(&ctx.editor, '\n')
-        move_up(&ctx.editor)
-    }
-
-    if rl.IsKeyPressed(.X) {
-		action = true
-        remove(&ctx.editor)
-    }
-	if rl.IsKeyPressed(.A) {
-		ctx.keyboard.mode = .INSERT
-		action = true
-	}
-	if rl.IsKeyPressed(.V) {ctx.keyboard.mode = .VISUAL; action = true}
-
 	return action
 }
 
-visual_mode_logic :: proc(ctx: ^Context) -> bool {
-	if rl.IsKeyPressed(.ESCAPE) {
-		ctx.keyboard.mode = .NORMAL
-		return true
-	}
-	return false
+visual_mode_logic :: proc(ctx: ^Context) -> (action: bool) {
+	return action
 }
