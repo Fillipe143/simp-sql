@@ -23,7 +23,7 @@ Keyboard :: struct {
 }
 
 default_keyboard :: proc() -> Keyboard {
-	return Keyboard{mode = .INSERT, repeat_delay = 0.3, repeat_rate = 0.03}
+	return Keyboard{mode = .NORMAL, repeat_delay = 0.3, repeat_rate = 0.03}
 }
 
 read_input :: proc(ctx: ^Context) {
@@ -124,11 +124,11 @@ normal_mode_logic :: proc(ctx: ^Context) -> (action: bool) {
         commit_undo(&ctx.editor)
         ctx.keyboard.mode = .INSERT
         if shift do move_start(&ctx.editor)
-        else do move_left(&ctx.editor)
     case key_is_actionable(.A, ctx):
         commit_undo(&ctx.editor)
         ctx.keyboard.mode = .INSERT
         if shift do move_end(&ctx.editor)
+        else do move_right(&ctx.editor)
     case key_is_actionable(.O, ctx):
         commit_undo(&ctx.editor)
         ctx.keyboard.mode = .INSERT
@@ -139,7 +139,6 @@ normal_mode_logic :: proc(ctx: ^Context) -> (action: bool) {
         } else {
             move_end(&ctx.editor)
             insert(&ctx.editor, '\n')
-            move_down(&ctx.editor)
         }
     case key_is_actionable(.DELETE, ctx):
         commit_undo(&ctx.editor)
@@ -147,19 +146,19 @@ normal_mode_logic :: proc(ctx: ^Context) -> (action: bool) {
         move_right(&ctx.editor)
     case key_is_actionable(.X, ctx):
         commit_undo(&ctx.editor)
-        remove(&ctx.editor)
         move_right(&ctx.editor)
+        remove(&ctx.editor)
     case key_is_actionable(.W, ctx):
         x, y := get_cursor(&ctx.editor)
         next_word(&ctx.editor)
         pending_delete(ctx, x, y)
     case key_is_actionable(.B, ctx):
         x, y := get_cursor(&ctx.editor)
-        prev_word(&ctx.editor)
+        start_word(&ctx.editor)
         pending_delete(ctx, x, y)
     case key_is_actionable(.E, ctx):
         x, y := get_cursor(&ctx.editor)
-        next_word(&ctx.editor)
+        end_word(&ctx.editor)
         move_left(&ctx.editor)
         pending_delete(ctx, x, y)
     case key_is_actionable(.D, ctx):
@@ -184,6 +183,7 @@ normal_mode_logic :: proc(ctx: ^Context) -> (action: bool) {
         action = false
     }
 
+    if ctx.keyboard.mode == .NORMAL do end_line_move_left(&ctx.editor)
     if action && prev_pending == ctx.keyboard.pending_action {
         ctx.keyboard.pending_action = .NONE
     }

@@ -1,5 +1,6 @@
 package editor
 
+import "core:unicode"
 import "core:fmt"
 import "core:strings"
 import "core:unicode/utf8"
@@ -48,11 +49,15 @@ tokenize_sql_line :: proc(line: string) -> [dynamic]Token {
 
     i := 0
     for i < len(line) {
-        char := line[i]
+        r, width := utf8.decode_rune_in_string(line[i:])
 
-        if char == ' ' || char == '\t' {
+        if unicode.is_white_space(r) {
             start := i
-            for i < len(line) && (line[i] == ' ' || line[i] == '\t') do i += 1
+            for i < len(line) {
+                next_r, next_w := utf8.decode_rune_in_string(line[i:])
+                if !unicode.is_white_space(next_r) do break
+                i += next_w
+            }
             append(&tokens, Token{line[start:i], SQL_DEFAULT_COLOR})
             continue
         }
@@ -62,52 +67,61 @@ tokenize_sql_line :: proc(line: string) -> [dynamic]Token {
             break
         }
 
-        if char == '\'' {
+        if r == '\'' {
             start := i
-            i += 1
-            for i < len(line) && line[i] != '\'' do i += 1
-            if i < len(line) do i += 1 
+            i += width 
+            for i < len(line) {
+                curr_r, curr_w := utf8.decode_rune_in_string(line[i:])
+                i += curr_w
+                if curr_r == '\'' do break
+            }
             append(&tokens, Token{line[start:i], SQL_STRING_COLOR})
             continue
         }
 
-        if char >= '0' && char <= '9' {
+        if unicode.is_digit(r) {
             start := i
-            for i < len(line) && (line[i] >= '0' && line[i] <= '9') do i += 1
+            for i < len(line) {
+                curr_r, curr_w := utf8.decode_rune_in_string(line[i:])
+                if !unicode.is_digit(curr_r) do break
+                i += curr_w
+            }
             append(&tokens, Token{line[start:i], SQL_NUMBER_COLOR})
             continue
         }
 
-        if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || char == '_' {
+        if unicode.is_alpha(r) || r == '_' {
             start := i
-            for i < len(line) && ((line[i] >= 'a' && line[i] <= 'z') || 
-                (line[i] >= 'A' && line[i] <= 'Z') || (line[i] >= '0' && line[i] <= '9') || line[i] == '_') {
-                i += 1
+            for i < len(line) {
+                curr_r, curr_w := utf8.decode_rune_in_string(line[i:])
+                if !unicode.is_alpha(curr_r) && !unicode.is_digit(curr_r) && curr_r != '_' do break
+                i += curr_w
             }
             word := line[start:i]
-            if is_sql_keyword(word) do word = strings.to_upper(word)
             color := is_sql_keyword(word) ? SQL_KEYWORD_COLOR : SQL_DEFAULT_COLOR
             append(&tokens, Token{word, color})
             continue
         }
 
-        append(&tokens, Token{line[i:i+1], SQL_DEFAULT_COLOR})
-        i += 1
+        append(&tokens, Token{line[i:i+width], SQL_DEFAULT_COLOR})
+        i += width
     }
     return tokens
 }
 
 new_context :: proc(x, y, w, h: i32) -> Context {
+    glyph_count :: 512 
+    
     return Context {
         x = x,
         y = y,
         w = w,
         h = h,
-        font = rl.LoadFontEx("assets/fonts/JetBrainsMonoNerdFont-Regular.ttf", 24, nil, 250),
-        sfont = rl.LoadFontEx("assets/fonts/JetBrainsMonoNerdFont-Regular.ttf", 18, nil, 250),
+        font = rl.LoadFontEx("assets/fonts/JetBrainsMonoNerdFont-Regular.ttf", 24, nil, glyph_count),
+        sfont = rl.LoadFontEx("assets/fonts/JetBrainsMonoNerdFont-Regular.ttf", 18, nil, glyph_count),
         editor = new_editor(""),
         keyboard = default_keyboard(),
-        focus = true,
+        focus = false,
         scroll_offset = {0, 0},
     }
 }
@@ -310,6 +324,12 @@ render_cursor :: proc(ctx: ^Context) {
 }
 
 render :: proc(ctx: ^Context) {
+    if rl.IsMouseButtonPressed(rl.MouseButton.LEFT) {
+        pos := rl.GetMousePosition()
+        ctx.focus = pos.x >= f32(ctx.x) && pos.y >= f32(ctx.y) && pos.x <= f32(ctx.x+ctx.w) && pos.y <= f32(ctx.y+ctx.h)
+        if ctx.focus do ctx.keyboard.last_input_time = rl.GetTime()
+    }
+
     if ctx.focus {
         read_input(ctx)
         update_scroll(ctx)
@@ -343,7 +363,7 @@ render :: proc(ctx: ^Context) {
     gl.Translatef(f32(content_x) - ctx.scroll_offset.x, f32(ctx.y) + 10 - ctx.scroll_offset.y, 0)
 
     render_lines(ctx, start_line, end_line)
-    render_cursor(ctx)
+    if ctx.focus do render_cursor(ctx)
 
     gl.PopMatrix()
     rl.EndScissorMode()

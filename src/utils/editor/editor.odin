@@ -1,7 +1,7 @@
 package editor
 
-import "core:strings"
 import z "../zipper"
+import "core:strings"
 import "core:unicode"
 import "core:unicode/utf8"
 
@@ -20,8 +20,8 @@ Editor :: struct {
 
 new_editor :: proc(data: string) -> Editor {
 	e: Editor
-    e.undo_stack = make([dynamic]Editor_Snapshot)
-    e.redo_stack = make([dynamic]Editor_Snapshot)
+	e.undo_stack = make([dynamic]Editor_Snapshot)
+	e.redo_stack = make([dynamic]Editor_Snapshot)
 	e.data = z.Zipper(z.Zipper(rune)) {
 		left  = make([dynamic]z.Zipper(rune)),
 		right = make([dynamic]z.Zipper(rune)),
@@ -30,7 +30,7 @@ new_editor :: proc(data: string) -> Editor {
 	if len(data) == 0 {
 		first_line := z.new_zipper(make([dynamic]rune, 0))
 		append(&e.data.right, first_line)
-        commit_undo(&e)
+		commit_undo(&e)
 		return e
 	}
 
@@ -55,7 +55,7 @@ new_editor :: proc(data: string) -> Editor {
 	}
 
 	delete(lines)
-    commit_undo(&e)
+	commit_undo(&e)
 	return e
 }
 
@@ -120,33 +120,68 @@ move_end :: proc(e: ^Editor) {
 }
 
 next_word :: proc(e: ^Editor) {
-	line := z.current(&e.data)
-	if line == nil do return
+    line := z.current(&e.data)
 
-	for len(line.right) > 0 && unicode.is_alpha(line.right[len(line.right) - 1]) {
-		z.move_right(line)
-	}
+    if line == nil || len(line.right) == 0 do return
+    char_atual := line.right[len(line.right) - 1]
 
-	for len(line.right) > 0 && !unicode.is_alpha(line.right[len(line.right) - 1]) {
-		z.move_right(line)
-	}
+    if unicode.is_alpha(char_atual) {
+        for len(line.right) > 0 && unicode.is_alpha(line.right[len(line.right) - 1]) {
+            z.move_right(line)
+        }
+    } else if !unicode.is_white_space(char_atual) {
+        for len(line.right) > 0 && !unicode.is_alpha(line.right[len(line.right) - 1]) && 
+            !unicode.is_white_space(line.right[len(line.right) - 1]) {
+            z.move_right(line)
+        }
+    }
 
-	e.target_column = len(line.left)
+    for len(line.right) > 0 && unicode.is_white_space(line.right[len(line.right) - 1]) {
+        z.move_right(line)
+    }
+
+    e.target_column = len(line.left)
 }
 
-prev_word :: proc(e: ^Editor) {
-	line := z.current(&e.data)
-	if line == nil do return
+start_word :: proc(e: ^Editor) {
+    line := z.current(&e.data)
+    if line == nil || len(line.left) == 0 do return
 
-	for len(line.left) > 0 && !unicode.is_alpha(line.left[len(line.left) - 1]) {
-		z.move_left(line)
-	}
+    for len(line.left) > 0 && unicode.is_white_space(line.left[len(line.left) - 1]) {
+        z.move_left(line)
+    }
 
-	for len(line.left) > 0 && unicode.is_alpha(line.left[len(line.left) - 1]) {
-		z.move_left(line)
-	}
+    if len(line.left) == 0 do return
+    char_esq := line.left[len(line.left) - 1]
 
-	e.target_column = len(line.left)
+    if unicode.is_alpha(char_esq) {
+        for len(line.left) > 0 && unicode.is_alpha(line.left[len(line.left) - 1]) {
+            z.move_left(line)
+        }
+    } else {
+        for len(line.left) > 0 && !unicode.is_alpha(line.left[len(line.left) - 1]) && 
+            !unicode.is_white_space(line.left[len(line.left) - 1]) {
+            z.move_left(line)
+        }
+    }
+
+    e.target_column = len(line.left)
+}
+
+end_word :: proc(e: ^Editor) {
+    line := z.current(&e.data)
+    if line == nil || len(line.right) == 0 do return
+    z.move_right(line)
+
+    for len(line.right) > 0 && unicode.is_white_space(line.right[len(line.right) - 1]) {
+        z.move_right(line)
+    }
+
+    for len(line.right) > 0 && !unicode.is_white_space(line.right[len(line.right) - 1]) {
+        z.move_right(line)
+    }
+
+    e.target_column = len(line.left)
 }
 
 insert :: proc(e: ^Editor, char: rune) {
@@ -294,10 +329,10 @@ delete_between_cursors :: proc(e: ^Editor, other_x, other_y: int) {
 	} else {
 		for len(line_start.left) > start_x do z.move_left(line_start)
 		for len(line_start.left) < start_x do z.move_right(line_start)
-		clear(&line_start.right) 
+		clear(&line_start.right)
 
 		for len(e.data.left) < end_y do z.move_right(&e.data)
-		line_end_val := pop(&e.data.right) 
+		line_end_val := pop(&e.data.right)
 
 		for len(e.data.left) > start_y {
 			mid_line := pop(&e.data.left)
@@ -316,67 +351,73 @@ delete_between_cursors :: proc(e: ^Editor, other_x, other_y: int) {
 }
 
 save_to_snapshot :: proc(e: ^Editor) -> Editor_Snapshot {
-    x, y := get_cursor(e)
-    all_lines: [dynamic]string
-    defer delete(all_lines)
-    
-    for i in 0 ..< line_count(e) {
-        append(&all_lines, get_line(e, i))
-    }
-    
-    return Editor_Snapshot{
-        text     = strings.join(all_lines[:], "\n", context.allocator),
-        cursor_x = x,
-        cursor_y = y,
-    }
+	x, y := get_cursor(e)
+	all_lines: [dynamic]string
+	defer delete(all_lines)
+
+	for i in 0 ..< line_count(e) {
+		append(&all_lines, get_line(e, i))
+	}
+
+	return Editor_Snapshot {
+		text = strings.join(all_lines[:], "\n", context.allocator),
+		cursor_x = x,
+		cursor_y = y,
+	}
 }
 
 commit_undo :: proc(e: ^Editor) {
-    append(&e.undo_stack, save_to_snapshot(e))
-    for len(e.redo_stack) > 0 {
-        s := pop(&e.redo_stack)
-        delete(s.text)
-    }
+	append(&e.undo_stack, save_to_snapshot(e))
+	for len(e.redo_stack) > 0 {
+		s := pop(&e.redo_stack)
+		delete(s.text)
+	}
 }
 
 undo :: proc(e: ^Editor) {
-    if len(e.undo_stack) == 0 do return
-    append(&e.redo_stack, save_to_snapshot(e))
-    snap := pop(&e.undo_stack)
-    restore_from_snapshot(e, snap)
-    delete(snap.text)
+	if len(e.undo_stack) == 0 do return
+	append(&e.redo_stack, save_to_snapshot(e))
+	snap := pop(&e.undo_stack)
+	restore_from_snapshot(e, snap)
+	delete(snap.text)
 }
 
 redo :: proc(e: ^Editor) {
-    if len(e.redo_stack) == 0 do return
-    append(&e.undo_stack, save_to_snapshot(e))
-    snap := pop(&e.redo_stack)
-    restore_from_snapshot(e, snap)
-    delete(snap.text)
+	if len(e.redo_stack) == 0 do return
+	append(&e.undo_stack, save_to_snapshot(e))
+	snap := pop(&e.redo_stack)
+	restore_from_snapshot(e, snap)
+	delete(snap.text)
 }
 
 restore_from_snapshot :: proc(e: ^Editor, snap: Editor_Snapshot) {
-    for len(e.data.left) > 0  { l := pop(&e.data.left);  z.destroy(&l) }
-    for len(e.data.right) > 0 { l := pop(&e.data.right); z.destroy(&l) }
-    
-    temp_editor := new_editor(snap.text)
-    e.data = temp_editor.data
-    
-    for _ in 0 ..< snap.cursor_y do move_down(e)
-    e.target_column = snap.cursor_x
-    set_column_to_target(e)
+	for len(e.data.left) > 0 {l := pop(&e.data.left); z.destroy(&l)}
+	for len(e.data.right) > 0 {l := pop(&e.data.right); z.destroy(&l)}
+
+	temp_editor := new_editor(snap.text)
+	e.data = temp_editor.data
+
+	for _ in 0 ..< snap.cursor_y do move_down(e)
+	e.target_column = snap.cursor_x
+	set_column_to_target(e)
 }
 
 move_to_first_line :: proc(e: ^Editor) {
-    for len(e.data.left) > 0 {
-        z.move_left(&e.data)
-    }
-    set_column_to_target(e)
+	for len(e.data.left) > 0 {
+		z.move_left(&e.data)
+	}
+	set_column_to_target(e)
 }
 
 move_to_last_line :: proc(e: ^Editor) {
-    for len(e.data.right) > 1 {
-        z.move_right(&e.data)
+	for len(e.data.right) > 1 {
+		z.move_right(&e.data)
+	}
+	set_column_to_target(e)
+}
+
+end_line_move_left :: proc(e: ^Editor) {
+    if len(z.current(&e.data).right) == 0 {
+        move_left(e)
     }
-    set_column_to_target(e)
 }

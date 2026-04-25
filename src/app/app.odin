@@ -10,6 +10,8 @@ start :: proc() {
 	rl.SetTargetFPS(60)
 
 	editor_ctx := editor.new_context(10, 10, 780, 580)
+    editor_ctx.keyboard.mode = .INSERT
+    editor_ctx.focus = true
 
 	for !rl.WindowShouldClose() {
 		rl.BeginDrawing()

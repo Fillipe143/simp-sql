@@ -6,6 +6,7 @@ The editor's code is terrible and buggy because it was rushed and nobody should 
 
 ## Features
 - [x] Parse sql
+- [ ] Generate expressions
 - [ ] Optimize expressions
 - [x] Vim motions (in progress)
 - [x] Syntax highlight
