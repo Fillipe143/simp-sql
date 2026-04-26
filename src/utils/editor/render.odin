@@ -149,7 +149,7 @@ new_context :: proc(x, y, w, h: i32) -> Context {
 		y = y,
 		w = w,
 		h = h,
-		background = rl.LoadTexture("assets/images/background2.png"),
+		background = rl.LoadTexture("assets/images/background.png"),
 		font = rl.LoadFontEx(
 			"assets/fonts/JetBrainsMonoNerdFont-Regular.ttf",
 			32,
@@ -408,7 +408,7 @@ render :: proc(ctx: ^Context) {
 		ctx.background,
 		ctx.x + (ctx.w - ctx.background.width) / 2,
 		(ctx.y + (ctx.h - ctx.background.height) / 2) - status_bar_h + 20,
-		{200, 200, 200, 255},
+		{100, 100, 100, 255},
 	)
 
 	font_size := f32(ctx.font.baseSize)

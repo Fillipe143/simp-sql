@@ -421,3 +421,20 @@ end_line_move_left :: proc(e: ^Editor) {
         move_left(e)
     }
 }
+
+get_visible_line_count :: proc(display_height: i32, font_size: f32, line_spacing: f32 = 1.0) -> int {
+    line_height := font_size * line_spacing
+    if line_height <= 0 do return 0
+    return int(f32(display_height) / line_height)
+}
+
+center_cursor_vertically :: proc(ctx: ^Context) {
+    _, row := get_cursor(&ctx.editor)
+    font_size := f32(ctx.font.baseSize)
+    status_font_size := f32(ctx.sfont.baseSize)
+    status_bar_h := status_font_size + 20
+    view_h := f32(ctx.h) - status_bar_h
+    line_y_px := f32(row) * font_size
+    target_scroll_y := line_y_px - (view_h / 2) + (font_size / 2)
+    ctx.scroll_offset.y = max(0, target_scroll_y)
+}
