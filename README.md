@@ -12,4 +12,4 @@ The editor's code is terrible and buggy because it was rushed and nobody should 
 - [x] Syntax highlight
 
 ## Preview:
-<img width="804" height="626" alt="image" src="https://github.com/user-attachments/assets/243d3e46-0f06-43ad-a972-6813364d9a67" />
+<img width="1202" height="1024" alt="image" src="https://github.com/user-attachments/assets/5e02697f-b9fb-4694-8c3d-6c5762e9cdf4" />
