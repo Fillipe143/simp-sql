@@ -122,10 +122,22 @@ consume_number :: proc(l: ^Lexer) -> Token {
 @(private)
 consume_symbol :: proc(l: ^Lexer) -> Token {
     // Consumes symbols
-	start := l.cursor
-	for is_symbol(peek(l)) {consume(l)}
-	value := split_data(l, start)
-	return new_token(value, start, identify_kind(value))
+    start := l.cursor
+    b := peek(l)
+    nb := peek_next(l)
+
+    if (b == '<' && nb == '=') || 
+       (b == '>' && nb == '=') || 
+       (b == '!' && nb == '=') ||
+       (b == '<' && nb == '>') {
+        consume(l)
+        consume(l)
+    } else {
+        consume(l)
+    }
+
+    value := split_data(l, start)
+    return new_token(value, start, identify_kind(value))
 }
 
 @(private)

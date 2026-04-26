@@ -32,6 +32,7 @@ BinaryExpr :: struct {
 Identifier :: struct {
 	table: string,
 	name:  string,
+    alias: string,
 }
 
 LiteralValue :: union {

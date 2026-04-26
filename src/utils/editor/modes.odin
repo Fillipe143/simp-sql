@@ -1,5 +1,6 @@
 package editor
 
+import "core:fmt"
 import rl "vendor:raylib"
 
 Mode :: enum {
@@ -109,6 +110,8 @@ normal_mode_logic :: proc(ctx: ^Context) -> (action: bool) {
 		move_up(&ctx.editor)
 	case key_is_actionable(.L, ctx):
 		move_right(&ctx.editor)
+    case key_is_actionable(.SLASH, ctx) && ctrl:
+        toggle_comment_line(&ctx.editor)
 	case pressed_char == '0':
 		x, y := get_cursor(&ctx.editor)
 		move_start(&ctx.editor)

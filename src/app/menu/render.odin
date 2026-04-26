@@ -109,6 +109,7 @@ render :: proc(ctx: ^Context) -> bool {
 
     if clicked != -1 {
         if clicked == 0 do open_file(ctx)
+        else if clicked == 1 do show_hieroglyphs(ctx)
     }
     
     return close_clicked

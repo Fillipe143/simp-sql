@@ -99,13 +99,14 @@ tokenize_sql_line :: proc(line: string) -> [dynamic]Token {
 			break
 		}
 
-		if r == '\'' {
+		if r == '\'' || r == '"' {
+            first_r := r
 			start := i
 			i += width
 			for i < len(line) {
 				curr_r, curr_w := utf8.decode_rune_in_string(line[i:])
 				i += curr_w
-				if curr_r == '\'' do break
+				if curr_r == first_r do break
 			}
 			append(&tokens, Token{line[start:i], SQL_STRING_COLOR})
 			continue

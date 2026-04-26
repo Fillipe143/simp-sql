@@ -5,7 +5,8 @@ import "menu"
 import rl "vendor:raylib"
 
 start :: proc() {
-    WINDOW_W, WINDOW_H, MENU_H :: 1200, 1000, 40
+    WINDOW_W, WINDOW_H, MENU_H :: 1000, 800, 40
+    // WINDOW_W, WINDOW_H, MENU_H :: 1920, 1080, 40
 	rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
 	rl.InitWindow(WINDOW_W, WINDOW_H, "SQL Editor")
 	rl.SetExitKey(.KEY_NULL)

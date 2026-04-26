@@ -438,3 +438,52 @@ center_cursor_vertically :: proc(ctx: ^Context) {
     target_scroll_y := line_y_px - (view_h / 2) + (font_size / 2)
     ctx.scroll_offset.y = max(0, target_scroll_y)
 }
+
+get_all_text :: proc(e: ^Editor, allocator := context.allocator) -> string {
+    builder := strings.builder_make(allocator)
+    
+    count := line_count(e)
+    for i in 0 ..< count {
+        line := get_line(e, i)
+        strings.write_string(&builder, line)
+        
+        if i < count - 1 {
+            strings.write_byte(&builder, '\n')
+        }
+    }
+    
+    return strings.to_string(builder)
+}
+
+toggle_comment_line :: proc(e: ^Editor) {
+    line := z.current(&e.data)
+    if line == nil do return
+
+    original_col := len(line.left)
+    for len(line.left) > 0 do z.move_left(line)
+
+    has_comment := false
+    if len(line.right) >= 2 {
+        if line.right[len(line.right)-1] == '-' && line.right[len(line.right)-2] == '-' {
+            has_comment = true
+        }
+    }
+
+    new_col := original_col
+    if has_comment {
+        z.remove_right(line)
+        z.remove_right(line)
+        new_col = max(0, original_col - 2)
+    } else {
+        z.insert_right(line, '-')
+        z.insert_right(line, '-')
+        new_col = original_col + 2
+    }
+
+    for _ in 0 ..< new_col {
+        if len(line.right) > 0 do z.move_right(line)
+        else do break
+    }
+
+    e.target_column = len(line.left)
+}
