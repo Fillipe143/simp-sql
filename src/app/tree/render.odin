@@ -95,15 +95,23 @@ handle_input :: proc(ctx: ^Context) {
     if rl.IsMouseButtonPressed(.LEFT) {
         ctx.dragged = find_node_under_mouse(ctx, &ctx.root, mouse_world.x, mouse_world.y)
     }
+
     if rl.IsMouseButtonReleased(.LEFT) {
         ctx.dragged = nil
     }
-    if ctx.dragged != nil {
-        ctx.dragged.x = mouse_world.x
-        ctx.dragged.y = mouse_world.y
+
+    if rl.IsMouseButtonDown(.LEFT) {
+        if ctx.dragged != nil {
+            ctx.dragged.x = mouse_world.x
+            ctx.dragged.y = mouse_world.y
+        } else {
+            delta := rl.GetMouseDelta()
+            ctx.camera.target.x -= delta.x / ctx.camera.zoom
+            ctx.camera.target.y -= delta.y / ctx.camera.zoom
+        }
     }
 
-    if rl.IsMouseButtonDown(.RIGHT) {
+    if rl.IsMouseButtonDown(.RIGHT) || rl.IsMouseButtonDown(.MIDDLE) {
         delta := rl.GetMouseDelta()
         ctx.camera.target.x -= delta.x / ctx.camera.zoom
         ctx.camera.target.y -= delta.y / ctx.camera.zoom

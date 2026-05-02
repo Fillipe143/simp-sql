@@ -2,22 +2,22 @@ package menu
 
 import rl "vendor:raylib"
 import "core:strings"
-import "../../utils/editor"
+import "../tabs"
 
 Context :: struct {
     x, y, w, h: i32,
     font:       rl.Font,
-    ctx_editor: ^editor.Context,
+    tab_ctx: ^tabs.Context,
 }
 
-new_context :: proc(x, y, w, h: i32, ctx: ^editor.Context) -> Context {
+new_context :: proc(x, y, w, h: i32, ctx: ^tabs.Context) -> Context {
     return Context {
         x = x,
         y = y,
         w = w,
         h = h,
         font = rl.LoadFontEx("assets/fonts/JetBrainsMonoNerdFont-Regular.ttf", i32(f32(h) * 0.6), nil, 256),
-        ctx_editor = ctx,
+        tab_ctx = ctx,
     }
 }
 
@@ -57,60 +57,20 @@ render_menu_list :: proc(ctx: ^Context, items: []string) -> (int, bool) {
     return clicked_idx, any_hovered
 }
 
-render_close_circle :: proc(ctx: ^Context) -> (is_clicked: bool, is_hovering: bool) {
-    COLOR_IDLE   := rl.Color{230, 40, 30, 255}
-    COLOR_HOVER  := rl.Color{255, 60, 50, 255}
-    COLOR_ACTIVE := rl.Color{160, 0, 0, 255}
 
-    radius := f32(ctx.h) * 0.30
-    center := rl.Vector2{
-        f32(ctx.x + ctx.w) - (f32(ctx.h) / 2),
-        f32(ctx.y) + (f32(ctx.h) / 2),
-    }
-
-    mouse_pos := rl.GetMousePosition()
-    is_hovering = rl.CheckCollisionPointCircle(mouse_pos, center, radius)
-    is_pressed := is_hovering && rl.IsMouseButtonDown(.LEFT)
-
-    circle_color := COLOR_IDLE
-    x_color := rl.WHITE
-    
-    if is_hovering {
-        circle_color = is_pressed ? COLOR_ACTIVE : COLOR_HOVER
-        x_color = {255, 255, 255, 255} 
-    } else {
-        x_color = {255, 255, 255, 200}
-    }
-
-    rl.DrawCircleV(center, radius, circle_color)
-    
-    size := radius * 0.4
-    start1 := rl.Vector2{ center.x - size, center.y - size }
-    end1   := rl.Vector2{ center.x + size, center.y + size }
-    start2 := rl.Vector2{ center.x + size, center.y - size }
-    end2   := rl.Vector2{ center.x - size, center.y + size }
-    rl.DrawLineEx(start1, end1, 2.0, x_color)
-    rl.DrawLineEx(start2, end2, 2.0, x_color)
-
-    is_clicked = is_hovering && rl.IsMouseButtonReleased(.LEFT)
-    return
-}
-
-render :: proc(ctx: ^Context) -> bool {
+render :: proc(ctx: ^Context) {
     rl.DrawRectangle(ctx.x, ctx.y, ctx.w, ctx.h, {35, 35, 35, 255})
     rl.DrawLine(ctx.x, ctx.y + ctx.h, ctx.x + ctx.w, ctx.y + ctx.h, rl.DARKGRAY)
 
-    menu_items := []string{"Abrir arquivo", "Exibir hieroglifos"}
+    menu_items := []string{"Abrir arquivo", "Novo arquivo", "Exibir hieroglifos"}
     clicked, menu_hovered := render_menu_list(ctx, menu_items)
-    close_clicked, close_hovered := render_close_circle(ctx)
 
-    if menu_hovered || close_hovered do rl.SetMouseCursor(.POINTING_HAND)
+    if menu_hovered do rl.SetMouseCursor(.POINTING_HAND)
     else do rl.SetMouseCursor(.DEFAULT)
 
     if clicked != -1 {
         if clicked == 0 do open_file(ctx)
-        else if clicked == 1 do show_hieroglyphs(ctx)
+        else if clicked == 1 do new_file(ctx)
+        else if clicked == 2 do show_hieroglyphs(ctx)
     }
-    
-    return close_clicked
 }

@@ -18,6 +18,14 @@ error_fmt :: proc(p: ^Parser, expected: string) -> Parse_Error {
 		expected,
 		p.current.value,
 	)
+	if p.current.value == "" {
+		msg = fmt.tprintf(
+			"[%d:%d] Erro: esperado %s, mas obteve EOF",
+			p.current.start.row,
+			p.current.start.col,
+			expected,
+		)
+	}
 	return Parse_Error{true, msg, p.current.start.row, p.current.start.col}
 }
 
@@ -51,6 +59,9 @@ parse_all :: proc(p: ^Parser) -> ([dynamic]Statement, Parse_Error) {
 		}
 		expect(p, .SEMICOLON)
 	}
+    if len(stmts) == 0 {
+        return stmts, error_fmt(p, "SELECT")
+    }
 	return stmts, {}
 }
 
@@ -95,56 +106,56 @@ parse_query :: proc(p: ^Parser) -> (Query, Parse_Error) {
 
 @(private)
 parse_alias :: proc(p: ^Parser) -> string {
-    expect(p, .AS) 
-    
-    if p.current.kind == .IDENTIFIER {
-        alias := p.current.value
-        advance(p)
-        return alias
-    }
-    return ""
+	expect(p, .AS)
+
+	if p.current.kind == .IDENTIFIER {
+		alias := p.current.value
+		advance(p)
+		return alias
+	}
+	return ""
 }
 
 @(private)
 parse_identifier :: proc(p: ^Parser) -> (Identifier, Parse_Error) {
-    ident: Identifier
-    token_atual := p.current
+	ident: Identifier
+	token_atual := p.current
 
-    if !expect(p, .IDENTIFIER) && !expect(p, .ASTERISK) {
-        return {}, error_fmt(p, "IDENTIFIER ou '*'")
-    }
+	if !expect(p, .IDENTIFIER) && !expect(p, .ASTERISK) {
+		return {}, error_fmt(p, "IDENTIFIER ou '*'")
+	}
 
-    if expect(p, .DOT) {
-        if token_atual.kind == .ASTERISK {
-            return {}, Parse_Error{true, "'*' não pode ser usado como nome de tabela", token_atual.start.row, token_atual.start.col}
-        }
-        
-        ident.table = token_atual.value
-        column_token := p.current
+	if expect(p, .DOT) {
+		if token_atual.kind == .ASTERISK {
+			return {}, Parse_Error{true, "'*' não pode ser usado como nome de tabela", token_atual.start.row, token_atual.start.col}
+		}
 
-        if !expect(p, .IDENTIFIER) && !expect(p, .ASTERISK) {
-            return {}, error_fmt(p, "IDENTIFIER ou '*' após o ponto")
-        }
-        ident.name = column_token.value
-    } else {
-        ident.table = ""
-        ident.name = token_atual.value
-    }
+		ident.table = token_atual.value
+		column_token := p.current
 
-    if p.current.kind == .AS {
-        advance(p) // consome "AS"
-        if p.current.kind == .IDENTIFIER {
-            ident.alias = p.current.value
-            advance(p)
-        } else {
-            return {}, error_fmt(p, "IDENTIFIER para o apelido")
-        }
-    } else if p.current.kind == .IDENTIFIER {
-        ident.alias = p.current.value
-        advance(p)
-    }
+		if !expect(p, .IDENTIFIER) && !expect(p, .ASTERISK) {
+			return {}, error_fmt(p, "IDENTIFIER ou '*' após o ponto")
+		}
+		ident.name = column_token.value
+	} else {
+		ident.table = ""
+		ident.name = token_atual.value
+	}
 
-    return ident, {}
+	if p.current.kind == .AS {
+		advance(p) // consome "AS"
+		if p.current.kind == .IDENTIFIER {
+			ident.alias = p.current.value
+			advance(p)
+		} else {
+			return {}, error_fmt(p, "IDENTIFIER para o apelido")
+		}
+	} else if p.current.kind == .IDENTIFIER {
+		ident.alias = p.current.value
+		advance(p)
+	}
+
+	return ident, {}
 }
 
 @(private)
