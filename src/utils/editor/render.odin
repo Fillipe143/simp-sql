@@ -18,7 +18,6 @@ Context :: struct {
 	editor:        Editor,
 	font:          rl.Font,
 	sfont:         rl.Font,
-	background:    rl.Texture2D,
 	focus:         bool,
 	keyboard:      Keyboard,
 	scroll_offset: rl.Vector2,
@@ -150,7 +149,6 @@ new_context :: proc(x, y, w, h: i32) -> Context {
 		y = y,
 		w = w,
 		h = h,
-		background = rl.LoadTexture("assets/images/background.png"),
 		font = rl.LoadFontEx(
 			"assets/fonts/JetBrainsMonoNerdFont-Regular.ttf",
 			32,
@@ -402,15 +400,7 @@ render :: proc(ctx: ^Context) {
 	status_font_size := f32(ctx.font.baseSize) * 0.45
 	status_bar_h := i32(status_font_size + 20)
 	editor_view_h := ctx.h - status_bar_h
-
 	rl.BeginScissorMode(ctx.x, ctx.y, ctx.w, editor_view_h)
-	rl.ClearBackground({18, 18, 18, 255})
-	rl.DrawTexture(
-		ctx.background,
-		ctx.x + (ctx.w - ctx.background.width) / 2,
-		(ctx.y + (ctx.h - ctx.background.height) / 2) - status_bar_h + 20,
-		{100, 100, 100, 255},
-	)
 
 	font_size := f32(ctx.font.baseSize)
 	gutter_w := get_gutter_width(ctx)

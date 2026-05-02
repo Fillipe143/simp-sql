@@ -5,8 +5,8 @@ import "menu"
 import rl "vendor:raylib"
 
 start :: proc() {
-    WINDOW_W, WINDOW_H, MENU_H :: 1000, 800, 40
-    // WINDOW_W, WINDOW_H, MENU_H :: 1920, 1080, 40
+	WINDOW_W, WINDOW_H, MENU_H :: 1000, 800, 40
+	// WINDOW_W, WINDOW_H, MENU_H :: 1920, 1080, 40
 	rl.SetTraceLogLevel(rl.TraceLogLevel.WARNING)
 	rl.InitWindow(WINDOW_W, WINDOW_H, "SQL Editor")
 	rl.SetExitKey(.KEY_NULL)
@@ -14,13 +14,20 @@ start :: proc() {
 
 	editor_ctx := editor.new_context(0, MENU_H, WINDOW_W, WINDOW_H - MENU_H)
 	menu_ctx := menu.new_context(0, 0, WINDOW_W, MENU_H, &editor_ctx)
+	background := rl.LoadTexture("assets/images/background.png")
 
 	for !rl.WindowShouldClose() {
 		rl.BeginDrawing()
-		rl.ClearBackground(rl.BLACK)
+		rl.ClearBackground({18, 18, 18, 255})
+		rl.DrawTexture(
+			background,
+			(WINDOW_W - background.width) / 2,
+			(MENU_H + (WINDOW_H - MENU_H - background.height) / 2) - 20,
+			{100, 100, 100, 255},
+		)
 
 		if menu.render(&menu_ctx) do break
-		editor.render(&editor_ctx)
+        editor.render(&editor_ctx)
 
 		rl.EndDrawing()
 	}
