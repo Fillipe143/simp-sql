@@ -72,7 +72,9 @@ render :: proc(ctx: ^Context) {
 		released = false
 	}
 
-	rl.DrawRectangle(ctx.x, ctx.y, ctx.w, ctx.h, rl.Color{30, 30, 30, 255})
+    if len(ctx.tab_list) > 0 {
+	    rl.DrawRectangle(ctx.x, ctx.y, ctx.w, ctx.h, rl.Color{30, 30, 30, 255})
+    }
 
 	if len(ctx.tab_list) > 0 {
 		if released {
