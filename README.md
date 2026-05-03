@@ -32,7 +32,7 @@ This code is a piece of shit and should not be used by anyone
   </tr>
   <tr>
     <td style="width: 50%; padding: 5px;">
-      <img src="https://github.com/user-attachments/assets/e60849a2-78e7-4b16-aa60-4a9f7c157e75" style="width: 100%;">
+      <img src="https://github.com/user-attachments/assets/95919217-9739-4fa1-9b89-2f051d19ebc6" style="width: 100%;">
     </td>
   </tr>
 </table>
