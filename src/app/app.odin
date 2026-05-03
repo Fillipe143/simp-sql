@@ -4,6 +4,7 @@ import "../utils/editor"
 import "menu"
 import "tabs"
 import "tree"
+import "table"
 import rl "vendor:raylib"
 
 start :: proc() {
@@ -45,6 +46,9 @@ start :: proc() {
 		case .TREE:
 			tree.render(cast(^tree.Context)curr_tab.app_ctx)
 			break
+        case .TABLE:
+            table.render(cast(^table.Context)curr_tab.app_ctx)
+            break
 		}
         last_tab_idx = tab_ctx.active_idx
 

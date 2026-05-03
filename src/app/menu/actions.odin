@@ -6,6 +6,7 @@ import "../../utils/editor"
 import "../../utils/sql"
 import "../tabs"
 import "../tree"
+import "../table"
 import "core:os"
 import "core:os/os2"
 import "core:path/filepath"
@@ -129,4 +130,16 @@ show_hieroglyphs :: proc(ctx: ^Context) {
 	)
     base_name := fmt.tprintf("algebra(%s)", tabs.active_tab(ctx.tab_ctx).title)
 	tabs.add_tab(ctx.tab_ctx, base_name, .TREE, rawptr(tree_ctx))
+}
+
+show_tables :: proc(ctx: ^Context) {
+    table_ptr := new(table.Context)
+    table_ptr^ = table.new_context(
+        ctx.tab_ctx.ax,
+        ctx.tab_ctx.ay,
+        ctx.tab_ctx.aw,
+        ctx.tab_ctx.ah,
+    )
+    table.setup_database_diagram(table_ptr)
+    tabs.add_tab(ctx.tab_ctx, "SQL Schema", .TABLE, rawptr(table_ptr))
 }

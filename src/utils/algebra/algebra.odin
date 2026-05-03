@@ -1,5 +1,6 @@
 package algebra
 
+import "../../utils/color"
 import "../../app/tree"
 import "../sql"
 import "core:fmt"
@@ -459,7 +460,7 @@ build_ui_tree :: proc(rel_node: ^RelNode) -> tree.Node {
 	if rel_node == nil do return ui_node
 
 	ui_node.value = rel_node.label
-	ui_node.color = tree.random_color()
+	ui_node.color = color.random()
 	ui_node.childrens = make([dynamic]tree.Node)
 
 	if rel_node.left != nil {

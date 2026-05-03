@@ -7,6 +7,7 @@ TabType :: enum {
 	NONE,
 	EDITOR,
 	TREE,
+    TABLE,
 }
 
 Tab :: struct {
