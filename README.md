@@ -12,6 +12,6 @@ This code is a piece of shit and should not be used by anyone
 - [x] Syntax highlight
 
 ## Preview:
-<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/ad94b40d-9f49-44b8-a8a3-20fa578cf170" />
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/6ac2f298-03e0-44f4-8031-d0735393e757" />
 <br>
-<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/6cd00f5e-7bc5-45f1-884c-f1b192e058c8" />
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/2f5aa739-9911-42f2-841c-04d42c66c0d2" />
