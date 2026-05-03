@@ -152,6 +152,7 @@ show_plan :: proc(ctx: ^Context) {
     ar_tree := get_algebra(ctx)
     if ar_tree == nil do return
 
+    ar_tree = algebra.optimize_tree(ar_tree)
     plan := algebra.generate_execution_plan(ar_tree)
     root_node := tree.Node{}
 
