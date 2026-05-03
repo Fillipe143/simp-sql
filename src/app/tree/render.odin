@@ -72,11 +72,11 @@ render :: proc(ctx: ^Context) {
 	rl.EndMode2D()
 }
 
-randomize_tree_colors :: proc(node: ^Node) {
+randomize_tree_colors :: proc(x, y: f32, node: ^Node) {
     node.color = color.random()
-    node.x, node.y = 0, 0
+    node.x, node.y = x, y
     for i in 0 ..< len(node.childrens) {
-        randomize_tree_colors(&node.childrens[i])
+        randomize_tree_colors(x, y, &node.childrens[i])
     }
 }
 
@@ -102,7 +102,7 @@ handle_input :: proc(ctx: ^Context) {
 	}
 
     if rl.IsKeyPressed(.R) {
-        randomize_tree_colors(&ctx.root)
+        randomize_tree_colors(ctx.root.x, ctx.root.y, &ctx.root)
     }
 
 	if rl.IsMouseButtonDown(.LEFT) {

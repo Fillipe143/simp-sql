@@ -7,13 +7,14 @@ TabType :: enum {
 	NONE,
 	EDITOR,
 	TREE,
-    TABLE,
+	TABLE,
 }
 
 Tab :: struct {
 	title:   string,
 	type:    TabType,
 	app_ctx: rawptr,
+	message: string,
 }
 
 Context :: struct {
@@ -38,7 +39,7 @@ new_context :: proc(x, y, w, h, ax, ay, aw, ah: i32) -> Context {
 		aw = aw,
 		ah = ah,
 		font = rl.LoadFontEx("assets/fonts/JetBrainsMonoNerdFont-Regular.ttf", 18, nil, 250),
-		afont = rl.LoadFontEx("assets/fonts/JetBrainsMonoNerdFont-Regular.ttf", 22, nil, 250),
+		afont = rl.LoadFontEx("assets/fonts/JetBrainsMonoNerdFont-Regular.ttf", 22, nil, 4096),
 		active_idx = -1,
 		dragging_idx = -1,
 		alert_message = "",
@@ -46,13 +47,19 @@ new_context :: proc(x, y, w, h, ax, ay, aw, ah: i32) -> Context {
 	}
 }
 
-add_tab :: proc(ctx: ^Context, title: string, type: TabType, app_ctx: rawptr) {
+add_tab :: proc(
+	ctx: ^Context,
+	title: string,
+	type: TabType,
+	app_ctx: rawptr,
+	message: string = "",
+) {
 	ctx.active_idx = len(ctx.tab_list)
-	append(&ctx.tab_list, Tab{title, type, app_ctx})
+	append(&ctx.tab_list, Tab{title, type, app_ctx, message})
 }
 
 active_tab :: proc(ctx: ^Context) -> Tab {
-	if ctx.active_idx < 0 || ctx.active_idx >= len(ctx.tab_list) do return Tab{"", .NONE, nil}
+	if ctx.active_idx < 0 || ctx.active_idx >= len(ctx.tab_list) do return Tab{"", .NONE, nil, ""}
 	return ctx.tab_list[ctx.active_idx]
 }
 
@@ -137,6 +144,84 @@ render :: proc(ctx: ^Context) {
 					3,
 					rl.RAYWHITE,
 				)
+				message := active_tab(ctx).message
+				if message != "" {
+					margin_x: f32 = 20.0
+					margin_y: f32 = 20.0
+
+					max_text_w := f32(ctx.aw) - (margin_x * 2.0)
+
+					words := strings.fields(message, context.temp_allocator)
+					current_line := ""
+					lines := make([dynamic]string, context.temp_allocator)
+
+					for word in words {
+						test_line: string
+						if len(current_line) == 0 {
+							test_line = word
+						} else {
+							test_line = strings.concatenate(
+								{current_line, " ", word},
+								context.temp_allocator,
+							)
+						}
+
+						test_cstr := strings.clone_to_cstring(test_line, context.temp_allocator)
+						size := rl.MeasureTextEx(ctx.afont, test_cstr, 22, 0)
+
+						if size.x > max_text_w && len(current_line) > 0 {
+							append(&lines, current_line)
+							current_line = word
+						} else {
+							current_line = test_line
+						}
+					}
+					if len(current_line) > 0 {
+						append(&lines, current_line)
+					}
+
+					line_spacing: f32 = 26.0
+					total_text_h := (f32(len(lines)) * line_spacing) - (line_spacing - 22.0)
+					start_y := f32(ctx.ay + ctx.ah) - total_text_h - margin_y
+
+					max_line_w: f32 = 0.0
+					for line in lines {
+						line_cstr := strings.clone_to_cstring(line, context.temp_allocator)
+						size := rl.MeasureTextEx(ctx.afont, line_cstr, 22, 0)
+						if size.x > max_line_w do max_line_w = size.x
+					}
+
+					bg_padding_x: f32 = 16.0
+					bg_padding_y: f32 = 12.0
+
+					bg_w := max_line_w + (bg_padding_x * 2.0)
+					bg_h := total_text_h + (bg_padding_y * 2.0)
+
+					bg_x := f32(ctx.ax) + (f32(ctx.aw) - bg_w) / 2.0
+					bg_y := start_y - bg_padding_y
+
+					rl.DrawRectangleRounded(
+						rl.Rectangle{bg_x, bg_y, bg_w, bg_h},
+						0.3,
+						10,
+						rl.Color{0, 0, 0, 200},
+					)
+
+					for line, idx in lines {
+						line_cstr := strings.clone_to_cstring(line, context.temp_allocator)
+						line_size := rl.MeasureTextEx(ctx.afont, line_cstr, 22, 0)
+						line_x := f32(ctx.ax) + (f32(ctx.aw) - line_size.x) / 2.0
+
+						rl.DrawTextEx(
+							ctx.afont,
+							line_cstr,
+							{line_x, start_y + f32(idx) * line_spacing},
+							22,
+							0,
+							rl.WHITE,
+						)
+					}
+				}
 			}
 
 			text_y := f32(ctx.y) + (f32(ctx.h) - text_size.y) / 2.0

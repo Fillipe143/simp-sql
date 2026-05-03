@@ -62,7 +62,7 @@ render :: proc(ctx: ^Context) {
     rl.DrawRectangle(ctx.x, ctx.y, ctx.w, ctx.h, {35, 35, 35, 255})
     rl.DrawLine(ctx.x, ctx.y + ctx.h, ctx.x + ctx.w, ctx.y + ctx.h, rl.DARKGRAY)
 
-    menu_items := []string{"Abrir arquivo", "Novo arquivo", "Algebra Relacional", "Tabelas"}
+    menu_items := []string{"Abrir arquivo", "Novo arquivo", "Algebra", "Otimizar", "Execução", "Tabelas"}
     clicked, menu_hovered := render_menu_list(ctx, menu_items)
 
     if menu_hovered do rl.SetMouseCursor(.POINTING_HAND)
@@ -71,7 +71,9 @@ render :: proc(ctx: ^Context) {
     if clicked != -1 {
         if clicked == 0 do open_file(ctx)
         else if clicked == 1 do new_file(ctx)
-        else if clicked == 2 do show_hieroglyphs(ctx)
-        else if clicked == 3 do show_tables(ctx)
+        else if clicked == 2 do show_algebra(ctx)
+        else if clicked == 3 do optimized_algebra(ctx)
+        else if clicked == 4 do show_plan(ctx)
+        else if clicked == 5 do show_tables(ctx)
     }
 }

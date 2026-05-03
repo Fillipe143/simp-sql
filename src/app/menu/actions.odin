@@ -1,12 +1,13 @@
 package menu
 
-import "core:fmt"
 import "../../utils/algebra"
+import "../../utils/color"
 import "../../utils/editor"
 import "../../utils/sql"
+import "../table"
 import "../tabs"
 import "../tree"
-import "../table"
+import "core:fmt"
 import "core:os"
 import "core:os/os2"
 import "core:path/filepath"
@@ -21,9 +22,9 @@ new_file :: proc(ctx: ^Context) {
 		ctx.tab_ctx.ah,
 	)
 	editor_ctx.focus = true
-    base_name := fmt.tprintf("query%d", ctx.tab_ctx.counter)
+	base_name := fmt.tprintf("query%d", ctx.tab_ctx.counter)
 	tabs.add_tab(ctx.tab_ctx, base_name, .EDITOR, rawptr(editor_ctx))
-    ctx.tab_ctx.counter+=1
+	ctx.tab_ctx.counter += 1
 }
 
 open_file :: proc(ctx: ^Context) {
@@ -33,7 +34,7 @@ open_file :: proc(ctx: ^Context) {
 			"--file-selection",
 			"--title=Selecione o arquivo SQL",
 			"--file-filter=Arquivos SQL | *.sql",
-            "--filename=./", 
+			"--filename=./",
 		},
 	}
 
@@ -69,14 +70,14 @@ open_file :: proc(ctx: ^Context) {
 	tabs.add_tab(ctx.tab_ctx, base_name, .EDITOR, rawptr(editor_ctx))
 }
 
-show_hieroglyphs :: proc(ctx: ^Context) {
+get_algebra :: proc(ctx: ^Context) -> ^algebra.RelNode {
 	curr_tab := tabs.active_tab(ctx.tab_ctx)
 	if curr_tab.type != .EDITOR {
 		tabs.show_alert(
 			ctx.tab_ctx,
 			"É necessário estar em um contexto de editor para utilizar esta função",
 		)
-		return
+		return nil
 	}
 	editor_ctx := cast(^editor.Context)curr_tab.app_ctx
 	content := editor.get_all_text(&editor_ctx.editor, context.temp_allocator)
@@ -85,41 +86,36 @@ show_hieroglyphs :: proc(ctx: ^Context) {
 	ast, err := sql.parse_all(&parser)
 	if err.occured {
 		tabs.show_alert(ctx.tab_ctx, err.message)
-		return
+		return nil
 	}
 
-    if len(ast) == 0 {
-        tabs.show_alert(ctx.tab_ctx, "Nenhum comando SQL encontrado.")
-        return
-    }
+	if len(ast) == 0 {
+		tabs.show_alert(ctx.tab_ctx, "Nenhum comando SQL encontrado.")
+		return nil
+	}
 
-    query, is_query := ast[0].(sql.Query) 
-    if !is_query {
-        tabs.show_alert(ctx.tab_ctx, "Por enquanto, apenas comandos SELECT podem ser convertidos para Álgebra Relacional.")
-        return
-    }
+	query, is_query := ast[0].(sql.Query)
+	if !is_query {
+		tabs.show_alert(
+			ctx.tab_ctx,
+			"Por enquanto, apenas comandos SELECT podem ser convertidos para Álgebra Relacional.",
+		)
+		return nil
+	}
 
-    ar_tree, tree_err := algebra.convert_to_relational_algebra(query)
-    if tree_err != "" {
-        tabs.show_alert(ctx.tab_ctx, tree_err)
-        return
-    }
+	ar_tree, tree_err := algebra.convert_to_relational_algebra(query)
+	if tree_err != "" {
+		tabs.show_alert(ctx.tab_ctx, tree_err)
+		return nil
+	}
+	return ar_tree
+}
 
-    fmt.println("# Algebra Relacional:")
-    fmt.println(algebra.tree_to_linear_string(ar_tree))
+show_algebra :: proc(ctx: ^Context) {
+	ar_tree := get_algebra(ctx)
+	if ar_tree == nil do return
 
-    fmt.println("\n# Árvore Canônica:")
-    algebra.print_tree(ar_tree)
-
-    fmt.println("\n# Árvore Otimizada:")
-    ar_tree = algebra.optimize_tree(ar_tree)
-    algebra.print_tree(ar_tree)
-
-    fmt.println("\n# Plano de Execução:")
-    plan := algebra.generate_execution_plan(ar_tree)
-    for curr in plan do fmt.println(curr)
-
-    root_node := algebra.build_ui_tree(ar_tree)
+	root_node := algebra.build_ui_tree(ar_tree)
 	tree_ctx := new(tree.Context)
 	tree_ctx^ = tree.new_context(
 		ctx.tab_ctx.ax,
@@ -128,18 +124,70 @@ show_hieroglyphs :: proc(ctx: ^Context) {
 		ctx.tab_ctx.ah,
 		root_node,
 	)
-    base_name := fmt.tprintf("algebra(%s)", tabs.active_tab(ctx.tab_ctx).title)
-	tabs.add_tab(ctx.tab_ctx, base_name, .TREE, rawptr(tree_ctx))
+    message := algebra.tree_to_linear_string(ar_tree)
+	base_name := fmt.tprintf("algebra(%s)", tabs.active_tab(ctx.tab_ctx).title)
+	tabs.add_tab(ctx.tab_ctx, base_name, .TREE, rawptr(tree_ctx), message)
 }
 
-show_tables :: proc(ctx: ^Context) {
-    table_ptr := new(table.Context)
-    table_ptr^ = table.new_context(
+optimized_algebra :: proc(ctx: ^Context) {
+	ar_tree := get_algebra(ctx)
+	if ar_tree == nil do return
+	ar_tree = algebra.optimize_tree(ar_tree)
+
+	root_node := algebra.build_ui_tree(ar_tree)
+	tree_ctx := new(tree.Context)
+	tree_ctx^ = tree.new_context(
+		ctx.tab_ctx.ax,
+		ctx.tab_ctx.ay,
+		ctx.tab_ctx.aw,
+		ctx.tab_ctx.ah,
+		root_node,
+	)
+    message := algebra.tree_to_linear_string(ar_tree)
+	base_name := fmt.tprintf("algebra_otimizada(%s)", tabs.active_tab(ctx.tab_ctx).title)
+	tabs.add_tab(ctx.tab_ctx, base_name, .TREE, rawptr(tree_ctx), message)
+}
+
+show_plan :: proc(ctx: ^Context) {
+    ar_tree := get_algebra(ctx)
+    if ar_tree == nil do return
+
+    plan := algebra.generate_execution_plan(ar_tree)
+    root_node := tree.Node{}
+
+    if len(plan) > 0 {
+        last_idx := len(plan) - 1
+        root_node.value = plan[last_idx]
+        root_node.childrens = make([dynamic]tree.Node)
+        root_node.color = color.random()
+        
+        for i := last_idx - 1; i >= 0; i -= 1 {
+            parent := tree.Node{
+                value = plan[i],
+                childrens = make([dynamic]tree.Node),
+                color = color.random(),
+            }
+            append(&parent.childrens, root_node)
+            root_node = parent
+        }
+    }
+
+    tree_ctx := new(tree.Context)
+    tree_ctx^ = tree.new_context(
         ctx.tab_ctx.ax,
         ctx.tab_ctx.ay,
         ctx.tab_ctx.aw,
         ctx.tab_ctx.ah,
+        root_node,
     )
-    table.setup_database_diagram(table_ptr)
-    tabs.add_tab(ctx.tab_ctx, "SQL Schema", .TABLE, rawptr(table_ptr))
+    
+    base_name := fmt.tprintf("Plano de Execução (%s)", tabs.active_tab(ctx.tab_ctx).title)
+    tabs.add_tab(ctx.tab_ctx, base_name, .TREE, rawptr(tree_ctx))
+}
+
+show_tables :: proc(ctx: ^Context) {
+	table_ptr := new(table.Context)
+	table_ptr^ = table.new_context(ctx.tab_ctx.ax, ctx.tab_ctx.ay, ctx.tab_ctx.aw, ctx.tab_ctx.ah)
+	table.setup_database_diagram(table_ptr)
+	tabs.add_tab(ctx.tab_ctx, "SQL Schema", .TABLE, rawptr(table_ptr))
 }
