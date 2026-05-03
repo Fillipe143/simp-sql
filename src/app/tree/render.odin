@@ -84,7 +84,7 @@ new_context :: proc(x, y, w, h: i32, root: Node) -> Context {
 		root = root,
 		camera = cam,
 		dragged = nil,
-		font = rl.LoadFontEx("assets/fonts/JetBrainsMonoNerdFont-Regular.ttf", 48, nil, 250),
+		font = rl.LoadFontEx("assets/fonts/JetBrainsMonoNerdFont-Regular.ttf", 48, nil, 8192),
 	}
 }
 

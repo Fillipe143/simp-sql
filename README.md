@@ -2,12 +2,12 @@
 Basic SQL implementation with graphical ui for management
 
 ## Notice
-The editor's code is terrible and buggy because it was rushed and nobody should use it.
+This code is a piece of shit and should not be used by anyone
 
 ## Features
 - [x] Parse sql
-- [ ] Generate expressions
-- [ ] Optimize expressions
+- [x] Generate expressions
+- [x] Optimize expressions
 - [x] Vim motions (in progress)
 - [x] Syntax highlight
 

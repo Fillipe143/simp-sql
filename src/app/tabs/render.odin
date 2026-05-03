@@ -23,6 +23,7 @@ Context :: struct {
 	active_idx:     int,
 	dragging_idx:   int,
 	alert_message:  string,
+	counter:        int,
 }
 
 new_context :: proc(x, y, w, h, ax, ay, aw, ah: i32) -> Context {
@@ -40,6 +41,7 @@ new_context :: proc(x, y, w, h, ax, ay, aw, ah: i32) -> Context {
 		active_idx = -1,
 		dragging_idx = -1,
 		alert_message = "",
+		counter = 1,
 	}
 }
 
@@ -72,9 +74,9 @@ render :: proc(ctx: ^Context) {
 		released = false
 	}
 
-    if len(ctx.tab_list) > 0 {
-	    rl.DrawRectangle(ctx.x, ctx.y, ctx.w, ctx.h, rl.Color{30, 30, 30, 255})
-    }
+	if len(ctx.tab_list) > 0 {
+		rl.DrawRectangle(ctx.x, ctx.y, ctx.w, ctx.h, rl.Color{30, 30, 30, 255})
+	}
 
 	if len(ctx.tab_list) > 0 {
 		if released {
@@ -271,8 +273,8 @@ render :: proc(ctx: ^Context) {
 
 		hover_close_btn := rl.CheckCollisionPointRec(mouse_pos, btn_rect)
 		btn_color := hover_close_btn ? rl.Color{70, 70, 70, 255} : rl.Color{50, 50, 50, 255}
-        if hover_close_btn do rl.SetMouseCursor(.POINTING_HAND)
-        else do rl.SetMouseCursor(.DEFAULT)
+		if hover_close_btn do rl.SetMouseCursor(.POINTING_HAND)
+		else do rl.SetMouseCursor(.DEFAULT)
 
 		rl.DrawRectangleRounded(btn_rect, 0.2, 10, btn_color)
 

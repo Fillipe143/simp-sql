@@ -1,10 +1,11 @@
 package menu
 
-import "../../utils/ast_conv"
+import "core:fmt"
+import "../../utils/algebra"
 import "../../utils/editor"
 import "../../utils/sql"
-import "../tree"
 import "../tabs"
+import "../tree"
 import "core:os"
 import "core:os/os2"
 import "core:path/filepath"
@@ -19,7 +20,9 @@ new_file :: proc(ctx: ^Context) {
 		ctx.tab_ctx.ah,
 	)
 	editor_ctx.focus = true
-	tabs.add_tab(ctx.tab_ctx, "query", .EDITOR, rawptr(editor_ctx))
+    base_name := fmt.tprintf("query%d", ctx.tab_ctx.counter)
+	tabs.add_tab(ctx.tab_ctx, base_name, .EDITOR, rawptr(editor_ctx))
+    ctx.tab_ctx.counter+=1
 }
 
 open_file :: proc(ctx: ^Context) {
@@ -29,6 +32,7 @@ open_file :: proc(ctx: ^Context) {
 			"--file-selection",
 			"--title=Selecione o arquivo SQL",
 			"--file-filter=Arquivos SQL | *.sql",
+            "--filename=./", 
 		},
 	}
 
@@ -65,28 +69,64 @@ open_file :: proc(ctx: ^Context) {
 }
 
 show_hieroglyphs :: proc(ctx: ^Context) {
-    curr_tab := tabs.active_tab(ctx.tab_ctx)
-    if curr_tab.type != .EDITOR {
-	    tabs.show_alert(ctx.tab_ctx, "É necessário estar em um contexto de editor para utilizar esta função");
-        return
-    }
-    editor_ctx := cast(^editor.Context)curr_tab.app_ctx
+	curr_tab := tabs.active_tab(ctx.tab_ctx)
+	if curr_tab.type != .EDITOR {
+		tabs.show_alert(
+			ctx.tab_ctx,
+			"É necessário estar em um contexto de editor para utilizar esta função",
+		)
+		return
+	}
+	editor_ctx := cast(^editor.Context)curr_tab.app_ctx
 	content := editor.get_all_text(&editor_ctx.editor, context.temp_allocator)
 	lexer := sql.new_lexer(transmute([]byte)content)
 	parser := sql.new_parser(lexer)
 	ast, err := sql.parse_all(&parser)
 	if err.occured {
-        tabs.show_alert(ctx.tab_ctx, err.message)
+		tabs.show_alert(ctx.tab_ctx, err.message)
+		return
+	}
+
+    if len(ast) == 0 {
+        tabs.show_alert(ctx.tab_ctx, "Nenhum comando SQL encontrado.")
         return
-    } 
-    root_node := ast_conv.convert_ast_to_tree(ast[:])
+    }
+
+    query, is_query := ast[0].(sql.Query) 
+    if !is_query {
+        tabs.show_alert(ctx.tab_ctx, "Por enquanto, apenas comandos SELECT podem ser convertidos para Álgebra Relacional.")
+        return
+    }
+
+    ar_tree, tree_err := algebra.convert_to_relational_algebra(query)
+    if tree_err != "" {
+        tabs.show_alert(ctx.tab_ctx, tree_err)
+        return
+    }
+
+    fmt.println("# Algebra Relacional:")
+    fmt.println(algebra.tree_to_linear_string(ar_tree))
+
+    fmt.println("\n# Árvore Canônica:")
+    algebra.print_tree(ar_tree)
+
+    fmt.println("\n# Árvore Otimizada:")
+    ar_tree = algebra.optimize_tree(ar_tree)
+    algebra.print_tree(ar_tree)
+
+    fmt.println("\n# Plano de Execução:")
+    plan := algebra.generate_execution_plan(ar_tree)
+    for curr in plan do fmt.println(curr)
+
+    root_node := algebra.build_ui_tree(ar_tree)
 	tree_ctx := new(tree.Context)
 	tree_ctx^ = tree.new_context(
 		ctx.tab_ctx.ax,
 		ctx.tab_ctx.ay,
 		ctx.tab_ctx.aw,
 		ctx.tab_ctx.ah,
-        root_node,
+		root_node,
 	)
-	tabs.add_tab(ctx.tab_ctx, "ast", .TREE, rawptr(tree_ctx))
+    base_name := fmt.tprintf("algebra(%s)", tabs.active_tab(ctx.tab_ctx).title)
+	tabs.add_tab(ctx.tab_ctx, base_name, .TREE, rawptr(tree_ctx))
 }
